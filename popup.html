@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>CRScheduler</title>
+  <style>
+    body { font-family: sans-serif; padding: 1em; width: 300px; }
+    textarea { width: 100%; height: 4em; }
+    button { margin-top: 0.5em; width: 100%; padding: 0.5em; }
+    table { width: 100%; border-collapse: collapse; margin-top: 1em; font-size: 0.8em; }
+    th, td { border: 1px solid #ccc; padding: 0.2em; text-align: center; }
+    th { background: #f0f0f0; }
+  </style>
+</head>
+<body>
+  <h3>Course URLs</h3>
+  <textarea id="urls" placeholder="Paste URLs, separated by commas"></textarea>
+  <label>
+    Favorite prof(s)?:
+    <input type="text" id="professorName" placeholder="e.g. Atienza, Coronel, Tan">
+  </label>
+  <label>
+    <input type="checkbox" id="strictProfMatch" />
+    Require **all** favorite professors to appear in a combo
+  </label>
+
+  <button id="fetchBtn">Fetch Schedules</button>
+
+  <div id="status"></div>
+  <div id="results"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
