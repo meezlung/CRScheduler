@@ -1,4 +1,5 @@
-// DOMContentLoaded is important because that 
+// DOMContentLoaded is important because this would help us wait when everything have been downloaded and executed.
+
 document.addEventListener('DOMContentLoaded', () => {
   // Grab manifest
   const manifest = chrome.runtime.getManifest();
@@ -23,18 +24,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
   (async () => {
     try {
-
-
-      const res = await fetch(`${BACKEND}/fetch-rupp1`);
-      const data = await res.json();
-      data.teachers.teachers.forEach(t => {
+      const RUPP1Data = await fetch(`${BACKEND}/fetch-rupp1`);
+      const RUPP1JSON = await RUPP1Data.json();
+      RUPP1JSON.teachers.teachers.forEach(t => {
         const key = `${t.firstName} ${t.lastName}`.toLowerCase();
         teacherMap.set(key, t.id);
       });
     } catch (e) {
       console.error("Could not load RUPP teacher map", e);
     } finally {
-      fetchBtn.disabled = false;  // now safe to click
+      fetchBtn.disabled = false;  // Now safe to click
     }
   })();
 
@@ -50,7 +49,7 @@ document.addEventListener('DOMContentLoaded', () => {
     const rawProfs = faveProfsInput.value.split(',').map(s => s.trim().toLowerCase()).filter(s => s.length > 0);
     console.log('rawProfs', rawProfs);
 
-    const strict = document.getElementById('strictProfMatch').checked;
+    const strict = strictProfMatchCheckbox.checked;
     console.log('strict', strict);
 
     const status = document.getElementById('status');
