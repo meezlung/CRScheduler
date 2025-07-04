@@ -3,31 +3,139 @@
 <head>
   <meta charset="UTF-8">
   <title>CRScheduler</title>
+  <link rel="icon" type="image/png" href="icons/icon16.png">
   <style>
-    body { font-family: sans-serif; padding: 1em; width: 300px; }
-    textarea { width: 100%; height: 4em; }
-    button { margin-top: 0.5em; width: 100%; padding: 0.5em; }
-    table { width: 100%; border-collapse: collapse; margin-top: 1em; font-size: 0.8em; }
-    th, td { border: 1px solid #ccc; padding: 0.2em; text-align: center; }
-    th { background: #f0f0f0; }
+    body {
+      margin: 0;
+      padding: 1em;
+      font-family: sans-serif;
+      font-size: 1em;       
+      display: flex;
+      max-width: 1200px;     
+      height: 100vh;
+      margin: 0 auto;
+      overflow: hidden;
+    }
+
+    .sidebar {
+      flex: 0 0 330px;      
+      border-right: 1px solid #ccc;
+      padding: 1em;
+      box-sizing: border-box;
+      overflow-y: auto; /* scrollbar */
+    }
+
+    #results {
+      flex: 1;
+      padding: 1em;
+      box-sizing: border-box;
+      overflow-y: auto; /* scrollbar */
+    }
+
+    .sidebar textarea,
+    .sidebar input,
+    .sidebar button {
+      display: block;
+      width: 100%;
+      max-width: 280px;     
+      margin-bottom: 0.75em;
+    }
+
+    .sidebar button {
+      margin-top: 0.7em;
+      width: 100%;
+      max-width: 320px;
+      height: 40px;
+    }
+
+    .sidebar label {
+      font-size: 0.9em;
+    }
+
+    .sidebar input {
+      margin-top: 3px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.9em;
+    }
+    th, td {
+      border: 1px solid #ccc;
+      padding: 0.3em;
+      text-align: center;
+    }
+    th {
+      background: #f0f0f0;
+    }
+
+    .checkbox-label {
+      display: flex;
+      align-items: center;
+      gap: 0.5em; /* keeps a bit of space, but you can shrink this */
+    }
+
+    .checkbox-label input[type="checkbox"] {
+      /* don’t let the checkbox stretch or shrink the flex row */
+      flex: 0 0 auto;
+      
+      /* kill any built-in padding/margins */
+      margin: 0;
+      padding: 0;
+      
+      /* explicitly size to a normal 1em × 1em checkbox */
+      width: 1em;
+      height: 1em;
+    }
+
+    .checkbox-label span {
+      font-size: 0.9em;
+    }
+
+    #example {
+      display: block;
+      background: #f8f8f8;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      padding: 0.5em;
+      margin-bottom: 0.75em;
+      font-size: 0.9em;
+      word-break: break-all;
+      width: 270px;
+    }
+
+    #status {
+      font-size: 0.9em;
+    }
   </style>
 </head>
 <body>
-  <h3>Course URLs</h3>
-  <textarea id="urls" placeholder="Paste URLs, separated by commas"></textarea>
-  <label>
-    Favorite prof(s)?:
+  <div class="sidebar">
+    <h1>CRScheduler</h1>
+
+    <label for="urls">Enter course URLs here:</label>
+    <textarea id="urls" placeholder="Paste URLs, separated by commas" rows="4"></textarea>
+    <span id="example">
+      Example: https://crs.upd.edu.ph/student_registration/class_search/19480,https://crs.upd.edu.ph/student_registration/class_search/18864,https://crs.upd.edu.ph/student_registration/class_search/18862
+    </span>
+
+    <label for="professorName">Favorite professor(s):</label>
     <input type="text" id="professorName" placeholder="e.g. Atienza, Coronel, Tan">
-  </label>
-  <label>
-    <input type="checkbox" id="strictProfMatch" />
-    Require **all** favorite professors to appear in a combo
-  </label>
 
-  <button id="fetchBtn">Fetch Schedules</button>
+    <label class="checkbox-label">
+      <input type="checkbox" id="strictProfMatch">
+      <span>Require <strong>all</strong> fave profs to appear in a combo!</span>
+    </label>
 
-  <div id="status"></div>
-  <div id="results"></div>
+    <button id="fetchBtn">Fetch Schedules</button>
+
+    <div id="status"></div>
+  </div>
+
+  <div id="results">
+    <!-- tables will get appended here -->
+  </div>
 
   <script src="popup.js"></script>
 </body>
