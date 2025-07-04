@@ -1,5 +1,3 @@
-// DOMContentLoaded is important because this would help us wait when everything have been downloaded and executed.
-
 document.addEventListener('DOMContentLoaded', () => {
   // Grab manifest
   const manifest = chrome.runtime.getManifest();
@@ -237,6 +235,9 @@ document.addEventListener('DOMContentLoaded', () => {
       const headerRow = headerTemplate.cloneNode(true);
       table.appendChild(headerRow);
 
+      // Collect average probability
+      let averageProbability = 0;
+
       // 3) For each course schedule in this group, add in a row
       group.forEach(item => {
         // Drill into your nested object exactly like before:
@@ -286,14 +287,27 @@ document.addEventListener('DOMContentLoaded', () => {
           instructorCell.textContent = details.Instructors;
         }
         // ---- Instructors Part ----
-        
 
         row.insertCell().textContent = String(details.Probability) + '%';
+        averageProbability += Number(details.Probability); // also add for average
 
         anyRendered = true;
       });
 
-      // 4) Spacer
+      // 4) Insert average probability at the last col
+      // Label 'Average Probability'
+      const averageRow = table.insertRow();
+      const averageCell = averageRow.insertCell();
+      averageCell.colSpan = cols.length - 1;
+      averageCell.style.textAlign = 'right';
+      averageCell.textContent = 'Average Probability:';
+
+      // Show actual average probability
+      const valueCell = average.insertCell();
+      valueCell.textContent = (averageProbability / group.length).toFixed(2) + '%';
+      valueCell.style.fontWeight = 'bold';
+
+      // 5) Spacer
       const spacer = table.insertRow();
       const sp = spacer.insertCell();
       sp.colSpan = cols.length;
