@@ -18,14 +18,18 @@
     }
 
     .sidebar {
-      flex: 0 0 330px;      
+      padding-right: 1em;
+      padding-top: 1em;
+      flex: 0 0 350px;      
       border-right: 1px solid #ccc;
-      padding: 1em;
+      /* padding: 1em; */
       box-sizing: border-box;
       overflow-y: auto; /* scrollbar */
     }
 
     #results {
+      margin-top: 20px;
+      margin-bottom: 20px; 
       flex: 1;
       padding: 1em;
       box-sizing: border-box;
@@ -37,14 +41,14 @@
     .sidebar button {
       display: block;
       width: 100%;
-      max-width: 280px;     
+      max-width: 320px;     
       margin-bottom: 0.75em;
     }
 
     .sidebar button {
       margin-top: 0.7em;
       width: 100%;
-      max-width: 320px;
+      max-width: 330px;
       height: 40px;
     }
 
@@ -100,13 +104,48 @@
       border-radius: 4px;
       padding: 0.5em;
       margin-bottom: 0.75em;
-      font-size: 0.9em;
+      font-size: 0.5em;
       word-break: break-all;
-      width: 270px;
+      width: 318px;
     }
 
     #status {
       font-size: 0.9em;
+    }
+
+    /* TIME TABLE */
+    .grid-filter {
+      margin: 1em 0;
+      font-size: 0.9em;
+    }
+    .grid-container {
+      display: grid;
+      /* 1 time‑column + 7 day‑columns = 8 total */
+      grid-template-columns: 3em repeat(6, 1fr);
+      grid-auto-rows: 1em; /* this mf is the cell height*/
+      border: 1px solid #ddd;
+    }
+    .grid-header {
+      background: #f0f0f0;
+      text-align: center;
+      font-weight: bold;
+      border-bottom: 1px solid #ddd;
+      line-height: 1.5em;
+      font-size: 0.6em;
+    }
+    .grid-times {
+      border-right: 1px solid #ddd;
+      text-align: right;
+      padding-right: 0.5em;
+      font-size: 0.6em;
+      color: #666;
+    }
+    .grid-cell {
+      border: 1px solid #eee;
+      cursor: pointer;
+    }
+    .grid-cell.blocked {
+      background: rgba(255, 62, 0, 0.3);
     }
   </style>
 </head>
@@ -116,9 +155,9 @@
 
     <label for="urls">Enter course URLs here:</label>
     <textarea id="urls" placeholder="Paste URLs, separated by commas" rows="4"></textarea>
-    <span id="example">
+    <!-- <span id="example">
       Example: https://crs.upd.edu.ph/student_registration/class_search/19480,https://crs.upd.edu.ph/student_registration/class_search/18864,https://crs.upd.edu.ph/student_registration/class_search/18862
-    </span>
+    </span> -->
 
     <label for="professorName">Favorite professor(s):</label>
     <input type="text" id="professorName" placeholder="e.g. Atienza, Coronel, Tan">
@@ -129,6 +168,20 @@
     </label>
 
     <button id="fetchBtn">Fetch Schedules</button>
+
+    <fieldset class="grid-filter">
+      <legend>Block out times</legend>
+      <div class="grid-container">
+        <div class="grid-header"></div>
+        <!-- Day headers -->
+        <div class="grid-header">Mon</div>
+        <div class="grid-header">Tue</div>
+        <div class="grid-header">Wed</div>
+        <div class="grid-header">Thu</div>
+        <div class="grid-header">Fri</div>
+        <div class="grid-header">Sat</div>
+      </div>
+    </fieldset>
 
     <div id="status"></div>
   </div>
