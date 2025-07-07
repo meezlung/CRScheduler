@@ -19,7 +19,7 @@
 
     .sidebar {
       padding-right: 1em;
-      padding-top: 1em;
+      padding-top: 0.2em;
       flex: 0 0 350px;      
       border-right: 1px solid #ccc;
       /* padding: 1em; */
@@ -45,11 +45,16 @@
       margin-bottom: 0.75em;
     }
 
-    .sidebar button {
+    #fetchBtn {
       margin-top: 0.7em;
       width: 100%;
       max-width: 330px;
       height: 40px;
+    }
+
+    #clearPaint {
+      width: 20%;
+      height: 20px;
     }
 
     .sidebar label {
@@ -111,6 +116,7 @@
 
     #status {
       font-size: 0.9em;
+      padding-bottom: 0.7em;
     }
 
     /* TIME TABLE */
@@ -148,6 +154,12 @@
     .grid-cell.blocked {
       background: rgba(255, 62, 0, 0.3);
     }
+
+    #clearBtnAndStatus {
+      display: flex;
+      align-items: center;
+      gap: 1em;
+    }
   </style>
 </head>
 <body>
@@ -184,7 +196,10 @@
       </div>
     </fieldset>
 
-    <div id="status"></div>
+    <div id="clearBtnAndStatus">
+      <button id="clearPaint">Clear All</button>
+      <div id="status"></div>
+    </div>
   </div>
 
   <div id="results">

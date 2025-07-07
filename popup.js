@@ -197,6 +197,12 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   })();
 
+  document.getElementById('clearPaint').addEventListener('click', () => {
+    document.querySelectorAll('.grid-cell').forEach(cell => {
+      cell.dataset.blocked = 'false';
+      cell.classList.remove('blocked');
+    });
+  });
 
   document.getElementById('fetchBtn').addEventListener('click', async () => {
     // Fetch from the timetable
