@@ -177,19 +177,23 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 
   // This part is for awaiting the Promise for both fetching priority and RUPP data
+  // While fetching student priority and RUPP data, buttons should be disabled 
   const fetchBtn = document.getElementById('fetchBtn');
-  fetchBtn.disabled = true;  // start disabled
+  fetchBtn.disabled = true;  // Start disabled
+
+  const clearBtn = document.getElementById('clearPaint');
+  clearBtn.disabled = true; // Start disabled
 
   // Only fetch priority once!
   const status = document.getElementById('status');
   status.textContent = 'Fetching priorities...';
-  // 1.0 Get classmessages and scrape priorities HTML page
+  // Get classmessages and scrape priorities HTML page
   const classMsgResp = await fetch('https://crs.upd.edu.ph/user/view/classmessages', {
     credentials: 'include'
   });
   const classMsgHtml = await classMsgResp.text();
 
-  // 1.1 Feed the classmessages HTML page to /scrape-priority endpoint
+  // Feed the classmessages HTML page to /scrape-priority endpoint
   const prioResp = await fetch(`${BACKEND}/scrape-priority`, {
     method: 'POST',
     headers: {
@@ -221,7 +225,8 @@ document.addEventListener('DOMContentLoaded', async () => {
   } catch (e) {
     console.error("Could not load RUPP teacher map", e);
   } finally {
-    fetchBtn.disabled = false;  // Now safe to click
+    fetchBtn.disabled = false; // Now safe to click
+    clearBtn.disabled = false;  
   }
 
   status.textContent = '';
