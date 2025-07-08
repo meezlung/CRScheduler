@@ -77,7 +77,7 @@ const dayMap = {
 // For caching -> { urlKey: JSON payload }
 const scheduleCache = new Map();
 
-document.addEventListener('DOMContentLoaded', () => {
+document.addEventListener('DOMContentLoaded', async () => {
   // For dynamic rendering of table
   const CHUNK_SIZE = 20;
 
@@ -175,29 +175,56 @@ document.addEventListener('DOMContentLoaded', () => {
     console.error("⚠️ No backend URL configured!");
   }
 
-  // This part is for awaiting the Promise for teacherMap
+
+  // This part is for awaiting the Promise for both fetching priority and RUPP data
   const fetchBtn = document.getElementById('fetchBtn');
   fetchBtn.disabled = true;  // start disabled
+
+  // Only fetch priority once!
+  const status = document.getElementById('status');
+  status.textContent = 'Fetching priorities...';
+  // 1.0 Get classmessages and scrape priorities HTML page
+  const classMsgResp = await fetch('https://crs.upd.edu.ph/user/view/classmessages', {
+    credentials: 'include'
+  });
+  const classMsgHtml = await classMsgResp.text();
+
+  // 1.1 Feed the classmessages HTML page to /scrape-priority endpoint
+  const prioResp = await fetch(`${BACKEND}/scrape-priority`, {
+    method: 'POST',
+    headers: {
+      'Accept': 'application/json',
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ html: classMsgHtml })
+  });
+
+  const prioJson = await prioResp.json();
+  if (prioJson.status !== 'success') {
+    throw new Error(prioJson.message || 'Failed to scrape priorities');
+  }
+  const { preenlistment_priority, registration_priority } = prioJson;
 
   // Fetch from latest RUPP website. NakaIIFE (Immediately Invoked Function Expression) para magexecute na agad. Don't have to reference it. 
   // Since Promises resolve to Response in this case, we need to use await to avoid unresolved Promises. This fixes the 'RUPP1JSON' is not a function.
   // Since we use await, we need to use async.
   const teacherMap = new Map();
 
-  (async () => {
-    try {
-      const RUPP1Data = await fetch(`${BACKEND}/fetch-rupp1`);
-      const RUPP1JSON = await RUPP1Data.json();
-      RUPP1JSON.teachers.teachers.forEach(t => {
-        const key = `${t.firstName} ${t.lastName}`.toLowerCase();
-        teacherMap.set(key, t.id);
-      });
-    } catch (e) {
-      console.error("Could not load RUPP teacher map", e);
-    } finally {
-      fetchBtn.disabled = false;  // Now safe to click
-    }
-  })();
+  try {
+    status.textContent = 'Fetching RUPP data...'
+    const RUPP1Data = await fetch(`${BACKEND}/fetch-rupp1`);
+    const RUPP1JSON = await RUPP1Data.json();
+    RUPP1JSON.teachers.teachers.forEach(t => {
+      const key = `${t.firstName} ${t.lastName}`.toLowerCase();
+      teacherMap.set(key, t.id);
+    });
+  } catch (e) {
+    console.error("Could not load RUPP teacher map", e);
+  } finally {
+    fetchBtn.disabled = false;  // Now safe to click
+  }
+
+  status.textContent = '';
 
   document.getElementById('clearPaint').addEventListener('click', () => {
     document.querySelectorAll('.grid-cell').forEach(cell => {
@@ -249,30 +276,6 @@ document.addEventListener('DOMContentLoaded', () => {
     } else {
       // We need to do the ordinary fetching. Make sure to set in scheduleCache!
       try {
-        // TODO: Only fetch priority once!
-        status.textContent = 'Fetching priorities...';
-        // 1.0 Get classmessages and scrape priorities HTML page
-        const classMsgResp = await fetch('https://crs.upd.edu.ph/user/view/classmessages', {
-          credentials: 'include'
-        });
-        const classMsgHtml = await classMsgResp.text();
-
-        // 1.1 Feed the classmessages HTML page to /scrape-priority endpoint
-        const prioResp = await fetch(`${BACKEND}/scrape-priority`, {
-          method: 'POST',
-          headers: {
-            'Accept': 'application/json',
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({ html: classMsgHtml })
-        });
-
-        const prioJson = await prioResp.json();
-        if (prioJson.status !== 'success') {
-          throw new Error(prioJson.message || 'Failed to scrape priorities');
-        }
-        const { preenlistment_priority, registration_priority } = prioJson;
-
         // 2. Get HTML pages for each course URL and scrape each table by calling the backend
         let allSchedules = [];
         let allCourseHTML = [];
@@ -319,7 +322,9 @@ document.addEventListener('DOMContentLoaded', () => {
               headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
-              }
+              },
+              preenlistment_priority: preenlistment_priority,
+              registration_priority: registration_priority
             }
           );
           if (!linkResponse.ok) {
