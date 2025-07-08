@@ -348,7 +348,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!linkJSON) {
           status.textContent = 'No schedules found.';
         } else {
-          status.textContent = ''; // Reset the textContent
+          console.log(linkJSON.data);
           // console.log('Ranked Sched', linkJSON.data);
           scheduleCache.set(urlKey, linkJSON.data); 
 
@@ -436,6 +436,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     const filtered = getFilteredGroups(groups, rawProfs, strict, forbiddenSlots);
     // console.log('filtered', filtered);
 
+    status.textContent = `Generated ${filtered.length} combinations.`; // Show a status of how many schedule combination was generated and filtered
+    
     if (filtered.length === 0) {
       document.getElementById('results').innerHTML = '<p>⚠️ No matching combinations found.</p>';
       return;
@@ -471,36 +473,21 @@ document.addEventListener('DOMContentLoaded', async () => {
     sentinel.id = 'load-sentinel';
     results.appendChild(sentinel);
 
+    // Set up the IntersectionObserver
+    const options = {
+      root: results, // watch within your scrollable `#results`
+      rootMargin: '0px',
+      threshold: 1.0 // sentinel must be fully in view
+    };
+    const observer = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting) { // this acts like a callback
+        renderChunk(filtered, rawProfs, strict, forbiddenSlots, cols, table, headerTemplate);
+      }
+    }, options);
+
     // Render the first <= 20 schedule combinations 
-    renderChunk(filtered, rawProfs, strict, forbiddenSlots, cols, table, headerTemplate);
-
-
-    results.removeEventListener('scroll', () => {
-      // Adding a removeEventListener since by default, addEventListener persists after the first time they are called! (https://developer.chrome.com/blog/addeventlistener-once)
-      // This fixes the multiple times this addEventListener is called for every scroll, instead of actually being called when it reaches threshold.
-      // We also clear results.innerHTML, sure. But, addEventListener still lives there since we just knew that they persist even when clearing the contents.
-
-      // How close to bottom before loading more?
-      const threshold = 50; // 50 px from the bottom
-      if (results.scrollTop + results.clientHeight >= table.offsetHeight - threshold) {
-        if (currentStart < filtered.length) {
-          console.log('Render more chunk!');
-          renderChunk(filtered, rawProfs, strict, forbiddenSlots, cols, table, headerTemplate);
-        }
-      }
-    });
-
-    // Render the next <= 20 schedule combinations depending on how close to bottom the scroll is
-    results.addEventListener('scroll', () => {
-      // How close to bottom before loading more?
-      const threshold = 50; // 50 px from the bottom
-      if (results.scrollTop + results.clientHeight >= table.offsetHeight - threshold) {
-        if (currentStart < filtered.length) {
-          console.log('Render more chunk!');
-          renderChunk(filtered, rawProfs, strict, forbiddenSlots, cols, table, headerTemplate);
-        }
-      }
-    });
+    renderChunk(filtered, rawProfs, strict, forbiddenSlots, cols, table, headerTemplate, observer, sentinel);
+    observer.observe(sentinel);
 
     // If there are no combinations, show this messaage
     if (!anyRendered) {
@@ -510,7 +497,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  function renderChunk(groups, rawProfs, strict, forbiddenSlots, cols, table, headerTemplate) {
+  function renderChunk(groups, rawProfs, strict, forbiddenSlots, cols, table, headerTemplate, observer, sentinel) {
     const end = Math.min(groups.length, currentStart + CHUNK_SIZE); // For deciding if how many to show at once initially
 
     for (let i = currentStart; i < end; i++) {
@@ -619,5 +606,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     currentStart = end;
+
+    if (currentStart >= groups.length) {
+      observer.disconnect();
+      sentinel.remove();
+    }
   }
 });
