@@ -13,6 +13,7 @@ function getBlockedTimes() {
   return blocked;
 }
 
+// TODO: small improvement is to memoize this
 function slotToTime(slot) {
   const hour = 7 + Math.floor(slot/2);
   const minute = slot % 2 === 0 ? '00' : '30';
@@ -21,6 +22,7 @@ function slotToTime(slot) {
   return `${h12}:${minute} ${ampm}`;
 }
 
+// TODO: small improvement is to memoize this
 function timeToSlots(timeStr) {
   let [rawStart, rawEnd] = timeStr.split('-').map(s => s.trim());
   // pull off AM/PM from end
@@ -364,57 +366,65 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   function getFilteredGroups(groups, rawProfs, strict, forbiddenSlots) {
-    // TODO: Optimize this. Currently runs in O(GFS)
-    return groups.filter(group => {
-      // Filter 1: Forbidden time slots. Basically iterate day, slot of forbidden then check if each of those is in conflict with each schedule combination
-      const hasConflict = forbiddenSlots.some(({ day, slot }) => {
-        // does any entry in this combo occupy that day+slot?
-        return group.some(item => {
-          const courseKey = Object.keys(item)[0];
-          const sectionArray = item[courseKey];  // [ { WFU: [...] }, … ]
+    // Build a set of forbidden slots in this manner: Mon|5, Tue|4, ...
+    const forbiddenSet = new Set(forbiddenSlots.map(({ day, slot }) => `${day}|${slot}`));
 
-          // flatten out all schedule entries for this group item
-          return sectionArray.some(sectionObj => {
-            const sectionName = Object.keys(sectionObj)[0];
-            const schedules = sectionObj[sectionName];  // [ {...}, {...} ]
+    // Optimization: We're now doing one pass of forbiddenSlots and one pass of occupiedSet first. Parsing each into {day|slot} format. Then, in the end, one pass of seeing their intersection. O(G*(S + F)).
+    return groups.filter(group => { // O(S)
+      const occupiedSet = new Set();
 
-            // now check *any* of those details objects for a conflict
-            return schedules.some(details => {
-              const days = dayMap[details.Day] || [];
-              if (!days.includes(day)) return false;
+      group.forEach(item => {
+        const courseKey = Object.keys(item)[0];
+        const sectionArray = item[courseKey];  // [ { WFU: [...] }, … ]
+        
+        sectionArray.forEach(sectionObj => {
+          const sectionName = Object.keys(sectionObj)[0]; 
+          const schedules = sectionObj[sectionName]; // [ {...}, {...} ]
 
-              const [startSlot, endSlot] = timeToSlots(details.Time);
-              return startSlot <= slot && slot <= endSlot;
+          schedules.forEach(details => {
+            const days = dayMap[details.Day] || [];
+            const [ startSlot, endSlot ] = timeToSlots(details.Time);
+            
+            days.forEach(day => {
+              for (let slot = startSlot; slot <= endSlot; slot++) {
+                occupiedSet.add(`${day}|${slot}`);
+              }
             });
           });
         });
       });
-      // Check if may conflict with forbidden time slots. If so, skip.
-      if (hasConflict) return false; // skip this combo
 
-      
+      // By the time we're here, forbiddenSet and occupiedSet are now built.
+      // We just need to find their intersection beautifully!
+      for (let key of forbiddenSet) { // O(F)
+        if (occupiedSet.has(key)) { // Note that .has is O(1)
+          return false;
+        }
+      }
+
+
       // Filter 2: Fave prof
       if (rawProfs.length > 0) {
         let includeGroup = true;
         if (strict) {
-          // every prof substring must appear in at least one item
+          // Every prof substring must appear in at least one item
           includeGroup = rawProfs.every(rp =>
             group.some(item => hasProf(item, rp))
           );
         } else {
-          // at least one match in the group
+          // At least one match in the group
           includeGroup = group.some(item =>
             rawProfs.some(rp => hasProf(item, rp))
           );
         }
 
         // Check if any professor in rawProfs is in the Instructors string. If so, skip.
-        if (!includeGroup) return false;  // skip this combo
+        if (!includeGroup) return false;  // Skip this combo
       } 
 
       // Passed all the filters here! Nice!
       return true; 
-    })
+    });
   }
 
   function renderTable(groups, rawProfs, strict, forbiddenSlots) {
