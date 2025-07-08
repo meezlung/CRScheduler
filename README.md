@@ -2,5 +2,5 @@ under development...
 
 demo:
 
-Uploading crscheduler-demo-compressed.mp4…
+https://github.com/user-attachments/assets/4dda1498-ec96-48f7-86d7-018a95644f93
 
