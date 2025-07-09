@@ -51,7 +51,7 @@ function timeToSlots(timeStr) {
   const e = normalize(end + ampm);
 
   // compute minutes since 7:00
-  const toSlot = ({h, mm}) => Math.floor(((h * 60 + mm) - (7 * 60)) / 30);
+  const toSlot = ({h, mm}) => ((h * 60 + mm) - (7 * 60)) / 30; // Don't floor this to output floating points. This is so that we account for 11:45, 12:45...
 
   return [ toSlot(s), toSlot(e) ];
 }
@@ -78,13 +78,27 @@ const dayMap = {
 const scheduleCache = new Map();
 
 document.addEventListener('DOMContentLoaded', async () => {
-  // For dynamic rendering of table
-  const CHUNK_SIZE = 20;
+  // This is for the visual or table view button
+  let isVisual = false;
+  let lastArgs = null;
+  document.getElementById('toggleView').addEventListener('click', () => {
+    if (!lastArgs) return; // nothing to show yet
+    isVisual = !isVisual;
+    document.getElementById('toggleView').textContent = isVisual ? 'Switch to table' : 'Switch to visual';
+    // Rerender with the same filters + data
+    renderTable(...lastArgs);
+  });
 
-  // For detecting whether there are or no matches found in renderTable
+
+  // For dynamic rendering of table and infinite scrolling
+  const CHUNK_SIZE = 20;
+  let currentStart = 0;
+
+  // For detecting whether there are or no matches found when generating schedule combinations
   let anyRendered = false;
 
-  // Format the table by generating time slots with for loop, hard coding div's is tiring
+
+  // Format the table at the sidebar by generating time slots with for loop, hard coding div's is tiring
   const container = document.querySelector('.grid-container');
   for (let slot = 0; slot < 25; slot++) {
     // 1) time label
@@ -194,6 +208,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const classMsgHtml = await classMsgResp.text();
 
   // Feed the classmessages HTML page to /scrape-priority endpoint
+  // TOOD: Good optimization is to scrape in client side!
   const prioResp = await fetch(`${BACKEND}/scrape-priority`, {
     method: 'POST',
     headers: {
@@ -357,6 +372,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           // console.log('Ranked Sched', linkJSON.data);
           scheduleCache.set(urlKey, linkJSON.data); 
 
+          currentStart = 0;
+
           renderTable(linkJSON.data, rawProfs, strict, forbiddenSlots);
         }
       } catch (err) {
@@ -438,6 +455,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function renderTable(groups, rawProfs, strict, forbiddenSlots) {
+    lastArgs = [groups, rawProfs, strict, forbiddenSlots];
+    const renderChunkFunction = isVisual ? renderVisualChunk : renderTableChunk;
+
     const filtered = getFilteredGroups(groups, rawProfs, strict, forbiddenSlots);
     // console.log('filtered', filtered);
 
@@ -465,36 +485,36 @@ document.addEventListener('DOMContentLoaded', async () => {
       headerTemplate.appendChild(th);
     });
 
-
-    // This part is important for dynamically loading every 20 combination of schedules.
-    // This is so that we don't overload the whole thing by feeding the whole table (if there are many schedule combinations)
-    // Initial Chunk
+    // Append the table first
     currentStart = 0;
-    results.appendChild(table); // Append table before rendering rows
-    
-    // Show the sentinel
-    // This will be the placeholder for a chunk
-    const sentinel = document.createElement('div');
+    results.appendChild(table);
+
+    // Show the sentinel once, at the very bottom of the content
+    sentinel = document.createElement('div');
     sentinel.id = 'load-sentinel';
     results.appendChild(sentinel);
 
     // Set up the IntersectionObserver
     const options = {
-      root: results, // watch within your scrollable `#results`
+      root: results, // Watch within scrollable `#results`
       rootMargin: '0px',
-      threshold: 1.0 // sentinel must be fully in view
+      threshold: 1 // sentinel must be fully in view
     };
-    const observer = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting) { // this acts like a callback
-        renderChunk(filtered, rawProfs, strict, forbiddenSlots, cols, table, headerTemplate);
+    observer = new IntersectionObserver(entries => {
+      console.log("isIntersecting", entries[0].isIntersecting);
+      if (entries[0].isIntersecting) { // This acts like a callback
+        console.log("Intersection Current Start", currentStart);
+        renderChunkFunction(filtered, rawProfs, strict, forbiddenSlots, cols, table, headerTemplate);
       }
     }, options);
 
-    // Render the first <= 20 schedule combinations 
-    renderChunk(filtered, rawProfs, strict, forbiddenSlots, cols, table, headerTemplate, observer, sentinel);
+    // Render the first <= 20 schedule combinations
+    renderChunkFunction(filtered, rawProfs, strict, forbiddenSlots, cols, table, headerTemplate, observer, sentinel);
+
+    // Observe the sentinel for when it's in view
     observer.observe(sentinel);
 
-    // If there are no combinations, show this messaage
+    // If there are no combinations, show this message
     if (!anyRendered) {
       const noCombinationMsg = document.createElement('p');
       noCombinationMsg.textContent = '⚠️ No matching combinations found.';
@@ -502,7 +522,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  function renderChunk(groups, rawProfs, strict, forbiddenSlots, cols, table, headerTemplate, observer, sentinel) {
+  function renderTableChunk(groups, rawProfs, strict, forbiddenSlots, cols, table, headerTemplate) {
     const end = Math.min(groups.length, currentStart + CHUNK_SIZE); // For deciding if how many to show at once initially
 
     for (let i = currentStart; i < end; i++) {
@@ -611,6 +631,127 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     currentStart = end;
+
+    if (currentStart >= groups.length) {
+      observer.disconnect();
+      sentinel.remove();
+    }
+  }
+
+  function renderVisualChunk(groups, rawProfs, strict, forbiddenSlots, cols, table, headerTemplate) {
+    const end = Math.min(groups.length, currentStart + CHUNK_SIZE); // For deciding how many to show at once initially
+
+    const slotHeight = 15;
+    const dayWidth = 124.19;
+
+    for (let i = currentStart; i < end; i++) {
+      const group = groups[i];
+
+      const comboWrapper = document.createElement('div');
+      comboWrapper.classList.add('combo-wrapper');
+
+      const combinationHeader = document.createElement('div');
+      combinationHeader.classList.add('combo-header');
+
+      const combinationNumber = document.createElement('div');
+      combinationNumber.classList.add('combo-number');      
+      combinationNumber.textContent = `Combination ${i + 1}`; // Shows Combination #1, #2, etc.
+      combinationHeader.appendChild(combinationNumber)
+
+      let averageProbability = 0;
+
+      const averageProbabilityHeader = document.createElement('div');
+      averageProbabilityHeader.classList.add('combo-probability');
+
+      const timetableCombo = document.createElement('div');
+      timetableCombo.classList.add('timetable-combo');
+
+      // 1) Day headers (row 1, cols 2–7)
+      ['Mon','Tue','Wed','Thu','Fri','Sat'].forEach((day, idx) => {
+        const dayHeader = document.createElement('div');
+        dayHeader.classList.add('day-header');
+        dayHeader.style.gridColumn = (idx + 2).toString(); // cols 2-7
+        dayHeader.textContent = day;
+        timetableCombo.appendChild(dayHeader);
+      });
+
+      // 2) Time labels (col 1, rows 2–26)
+      for (let slot = 0; slot < 25; slot++) {
+        const hour = 7 + Math.floor(slot / 2)
+        const min = slot % 2 ? '30' : '00'
+        const ampm = hour < 12 ? 'AM' : 'PM'
+        const h12 = ((hour + 11) % 12) + 1;
+        const label = document.createElement('div');
+        label.classList.add('time-label');
+        label.style.gridRow = (slot + 2).toString();
+        label.textContent = `${h12}:${min} ${ampm}`;
+        timetableCombo.appendChild(label);
+      }
+
+      // 3) Each meeting -> one block
+      group.forEach(item => {
+        const course = Object.keys(item)[0];
+        item[course].forEach(sectionObj => {
+          const section = Object.keys(sectionObj)[0];
+          sectionObj[section].forEach(details => {
+            const days = dayMap[details.Day] || [];
+            const [s, e] = timeToSlots(details.Time);
+            // console.log('time', details.Time, 'startTimeSlot', s, 'endTimeSlot', e);
+            const probText = (details.Probability != null) ? `${Math.round(details.Probability * 100) / 100}%` : '';
+            
+            if (details.Probability !== null) {
+              averageProbability += Number(details.Probability); // also add for average
+            }
+
+            days.forEach(fullDay => {
+              const dayIdx = ['Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(fullDay.slice(0, 3));
+              if (dayIdx < 0) return;
+              const block = document.createElement('div');
+              block.classList.add('block');
+
+              // block.style.gridColumn = (dayIdx + 2).toString();
+              // block.style.gridRow = `${s + 2} / span ${e - s}`;
+
+              // position horizontally by day index
+              block.style.left = `${((dayIdx + 1) * dayWidth) - 67}px`;
+              block.style.width = `${dayWidth - 2}px`; // account for border
+
+              // position vertically by start slot * slotHeight
+              block.style.top = `${(s * slotHeight) - 10}px`;
+              block.style.height = `${(e - s) * slotHeight}px`; // this account for how much the sched lasts
+              
+              block.innerHTML = `
+                <strong>${course} ${section}</strong><br>
+                <em>${details.Instructors}</em><br>
+                <small>${probText}</small>
+              `;
+              timetableCombo.appendChild(block);
+            });
+          });
+        });
+      });
+
+      // Append average probability to combinationHeader
+      averageProbabilityHeader.textContent = 'Average Probability: ' + (averageProbability / group.length).toFixed(2) + '%';
+      // averageProbabilityHeader.style.fontWeight = 'bold';
+      combinationHeader.appendChild(averageProbabilityHeader);
+      comboWrapper.appendChild(combinationHeader);
+
+
+      // Append the combo at the bottom of the container
+      anyRendered = true;
+      comboWrapper.appendChild(timetableCombo);
+      results.appendChild(comboWrapper);
+    }
+
+    currentStart = end;
+
+    // console.log('sentinel', sentinel);
+
+    // Append the sentinel at the bottom after each chunk is rendered
+    if (currentStart < groups.length) {
+      results.appendChild(sentinel);
+    }
 
     if (currentStart >= groups.length) {
       observer.disconnect();
