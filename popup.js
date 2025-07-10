@@ -350,49 +350,6 @@ document.addEventListener('DOMContentLoaded', () => {
       return;
     }
 
-    // Add a new button here that listens to activate renderSimilarShapeCombination
-    const similarShapeBtn = document.createElement('button');
-    similarShapeBtn.id = 'showSimilarShape';
-    similarShapeBtn.textContent = 'Show Similar Shape Combinations';
-    results.appendChild(similarShapeBtn);
-
-    similarShapeBtn.addEventListener('click', () => {
-      results.innerHTML = '';
-      renderSimilarShapeCombination(filtered, rawProfs, strict, forbiddenSlots, cols, table, headerTemplate); 
-    });    
-
-    if (similarShapeCombinations.size === 0) {
-      results.innerHTML = '<p>⚠️ No matching combinations found.</p>';
-      return;
-    }
-
-    // Add a new button here that listens to activate renderSimilarShapeCombination
-    const similarShapeBtn = document.createElement('button');
-    similarShapeBtn.id = 'showSimilarShape';
-    similarShapeBtn.textContent = 'Show Similar Shape Combinations';
-    results.appendChild(similarShapeBtn);
-
-    similarShapeBtn.addEventListener('click', () => {
-      results.innerHTML = '';
-      renderSimilarShapeCombination(filtered, rawProfs, strict, forbiddenSlots, cols, table, headerTemplate); 
-    });    
-
-    if (similarShapeCombinations.size === 0) {
-      results.innerHTML = '<p>⚠️ No matching combinations found.</p>';
-      return;
-    }
-
-    // Add a new button here that listens to activate renderSimilarShapeCombination
-    const similarShapeBtn = document.createElement('button');
-    similarShapeBtn.id = 'showSimilarShape';
-    similarShapeBtn.textContent = 'Show Similar Shape Combinations';
-    results.appendChild(similarShapeBtn);
-
-    similarShapeBtn.addEventListener('click', () => {
-      results.innerHTML = '';
-      renderSimilarShapeCombination(filtered, rawProfs, strict, forbiddenSlots, cols, table, headerTemplate); 
-    });    
-
     // Append the table first
     currentStart = 0;
     results.appendChild(table);
