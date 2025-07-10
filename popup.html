@@ -19,7 +19,7 @@
 
     .sidebar {
       padding-right: 1em;
-      padding-top: 0.2em;
+      padding-top: 0.7em;
       flex: 0 0 350px;      
       border-right: 1px solid #ccc;
       /* padding: 1em; */
@@ -42,7 +42,16 @@
       display: block;
       width: 100%;
       max-width: 320px;     
-      margin-bottom: 0.75em;
+      margin-bottom: 0.3em;
+    }
+
+    #clearBtnAndStatus {
+      margin-top: 15px;
+      display: flex;
+      align-items: center;
+      text-align: center;
+      justify-content: center;
+      gap: 1em;
     }
 
     #fetchBtn {
@@ -54,13 +63,16 @@
 
     #clearPaint {
       min-width: 70px;
-      max-width: 70px;
       height: 40px;
     }
 
     #toggleView {
       min-width: 70px;
-      max-width: 70px;
+      height: 40px;
+    }
+
+    #showSimilar {
+      min-width: 70px;
       height: 40px;
     }
 
@@ -122,20 +134,21 @@
     }
 
     #status {
+      margin-top: 1em;
       font-size: 0.9em;
       padding-bottom: 0.7em;
     }
 
     /* TIME TABLE */
     .grid-filter {
-      margin: 1em 0;
+      margin: 0.2em 0;
       font-size: 0.9em;
     }
     .grid-container {
       display: grid;
       /* 1 time‑column + 7 day‑columns = 8 total */
       grid-template-columns: 3em repeat(6, 1fr);
-      grid-auto-rows: 1em; /* this mf is the cell height*/
+      grid-auto-rows: 12px; /* this mf is the cell height*/
       border: 1px solid #ddd;
     }
     .grid-header {
@@ -150,7 +163,7 @@
       border-right: 1px solid #ddd;
       text-align: right;
       padding-right: 0.5em;
-      padding-top: 0.2em;
+      padding-top: 0.1em;
       font-size: 0.6em;
       color: #666;
     }
@@ -160,12 +173,6 @@
     }
     .grid-cell.blocked {
       background: rgba(255, 0, 0, 0.3);
-    }
-
-    #clearBtnAndStatus {
-      display: flex;
-      align-items: center;
-      gap: 1em;
     }
 
     .combo-wrapper {
@@ -258,20 +265,19 @@
       margin-top: 25px;
       pointer-events: auto;
       z-index: 2;
+      /* for scroll bar */
+      max-height: 100%;
+      overflow-x: hidden;
+      overflow-y: auto;
+      padding-right: 0.3em;
     }
     
-    .block:hover::after {
-      min-width: 8em;
-      content: attr(data-sessions);    /* use your own data‑attribute */
-      position: absolute;
-      left: 0; top: 100%;
-      white-space: pre;                /* preserve newlines */
-      background: rgba(0,0,0,0.8);
-      color: #fff;
-      padding: 0.3em;
-      font-size: 0.75em;
+    .block::-webkit-scrollbar {
+      width: 6px;
+    }
+    .block::-webkit-scrollbar-thumb {
+      background: rgba(0,0,0,0.3);
       border-radius: 3px;
-      z-index: 10;
     }
   </style>
 </head>
@@ -293,7 +299,13 @@
       <span>Require <strong>all</strong> fave profs to appear in a combo!</span>
     </label>
 
-    <button id="fetchBtn">Fetch Schedules</button>
+
+    <div id="clearBtnAndStatus">
+      <button id="clearPaint">Clear all times</button>
+      <button id="toggleView">Switch to visual view</button>
+      <button id="showSimilar">Combine Similar Shape</button>
+    </div>
+
 
     <fieldset class="grid-filter">
       <legend>Block out times</legend>
@@ -309,11 +321,9 @@
       </div>
     </fieldset>
 
-    <div id="clearBtnAndStatus">
-      <button id="clearPaint">Clear All</button>
-      <button id="toggleView">Switch to visual</button>
-      <div id="status"></div>
-    </div>
+    <button id="fetchBtn">Fetch Schedules</button>
+
+    <div id="status"></div>
   </div>
 
   <div id="results">
