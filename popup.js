@@ -1,4 +1,185 @@
-document.addEventListener('DOMContentLoaded', () => {
+function getBlockedTimes() {
+  const blocked = [];
+  document.querySelectorAll('.grid-cell').forEach(cell => {
+    if (cell.dataset.blocked === 'true') {
+      blocked.push({
+        day: cell.dataset.day,
+        slot: Number(cell.dataset.slot),
+        // optional human‑readable time:
+        time: slotToTime(Number(cell.dataset.slot))
+      });
+    }
+  });
+  return blocked;
+}
+
+// TODO: small improvement is to memoize this
+function slotToTime(slot) {
+  const hour = 7 + Math.floor(slot/2);
+  const minute = slot % 2 === 0 ? '00' : '30';
+  const ampm = hour < 12 ? 'AM' : 'PM';
+  const h12 = ((hour + 11) % 12) + 1;
+  return `${h12}:${minute} ${ampm}`;
+}
+
+// TODO: small improvement is to memoize this
+function timeToSlots(timeStr) {
+  let [rawStart, rawEnd] = timeStr.split('-').map(s => s.trim());
+  // pull off AM/PM from end
+  const mEnd = rawEnd.match(/(AM|PM)$/i);
+  if (!mEnd) throw new Error("Cannot parse end time: " + rawEnd);
+  const ampm = mEnd[1].toUpperCase();
+  let end = rawEnd.replace(/(AM|PM)$/i, '');
+  let start = rawStart;
+
+  // if start has no AM/PM, tack on the one from end
+  if (!/AM|PM$/i.test(start)) start += ampm;
+
+  // ensure both have minutes
+  function normalize(t) {
+    // now t looks like “H” or “H:MM” plus AM/PM
+    const m = t.match(/^(\d{1,2})(?::(\d{2}))?(AM|PM)$/i);
+    if (!m) throw new Error("Bad time: " + t);
+    let h = parseInt(m[1],10), mm = m[2] ? parseInt(m[2],10) : 0, ap = m[3].toUpperCase();
+    // roll 12‑hour to 24‑hour
+    if (h === 12) h = ap === 'AM' ? 0 : 12;
+    else if (ap === 'PM') h += 12;
+    return { h, mm };
+  }
+
+  const s = normalize(start);
+  const e = normalize(end + ampm);
+
+  // compute minutes since 7:00
+  const toSlot = ({h, mm}) => ((h * 60 + mm) - (7 * 60)) / 30; // Don't floor this to output floating points. This is so that we account for 11:45, 12:45...
+
+  return [ toSlot(s), toSlot(e) ];
+}
+
+// Global map for day parsing, maybe there's a better way of doing this
+// TODO: improve this
+const dayMap = {
+  "M": ["Monday"],
+  "T": ["Tuesday"],
+  "W": ["Wednesday"],
+  "Th": ["Thursday"],
+  "F": ["Friday"],
+  "S": ["Saturday"],
+  "Su": ["Sunday"],
+  "MWF": ["Monday", "Wednesday", "Friday"],
+  "TTh": ["Tuesday", "Thursday"],
+  "WF": ["Wednesday", "Friday"],
+  "TF": ["Tuesday", "Friday"],
+  "MW": ["Monday", "Wednesday"],
+  "MTWThF": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+};
+
+// For caching -> { urlKey: JSON payload }
+const scheduleCache = new Map();
+
+// For collecting similar structure of time slots
+const similarShapeCombinations = new Map();
+
+document.addEventListener('DOMContentLoaded', async () => {
+  // This is for the visual or table view button
+  let isVisual = false;
+  let lastArgs = null;
+  document.getElementById('toggleView').addEventListener('click', () => {
+    if (!lastArgs) return; // nothing to show yet
+    isVisual = !isVisual;
+    document.getElementById('toggleView').textContent = isVisual ? 'Switch to table' : 'Switch to visual';
+    // Rerender with the same filters + data
+    renderTable(...lastArgs);
+  });
+
+
+  // For dynamic rendering of table and infinite scrolling
+  const CHUNK_SIZE = 20;
+  let currentStart = 0;
+
+  // For detecting whether there are or no matches found when generating schedule combinations
+  let anyRendered = false;
+
+
+  // Format the table at the sidebar by generating time slots with for loop, hard coding div's is tiring
+  const container = document.querySelector('.grid-container');
+  for (let slot = 0; slot < 25; slot++) {
+    // 1) time label
+    const hour = 7 + Math.floor(slot / 2);
+    const minute = slot % 2 === 0 ? '00' : '30';
+    const ampm = hour < 12 ? 'AM' : 'PM';
+    const displayHour = ((hour + 11) % 12) + 1;
+    const label = document.createElement('div');
+    label.className = 'grid-times';
+    label.textContent = `${displayHour}:${minute} ${ampm}`;
+    container.appendChild(label);
+
+    // 2) one cell per day Mon–Sat (6)
+    for (let day = 0; day < 6; day++) {
+      const cell = document.createElement('div');
+      cell.className = 'grid-cell';
+      cell.dataset.blocked = 'false';
+      cell.addEventListener('click', () => {
+        cell.dataset.blocked = cell.dataset.blocked === 'true' ? 'false' : 'true';
+        cell.classList.toggle('blocked');
+      });
+
+      cell.dataset.day = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][day];
+      cell.dataset.slot = slot;  
+
+      container.appendChild(cell);
+    }
+  }
+
+  // -----------------------
+  // Time table painting logic
+  let isMouseDown = false;
+  let paintMode = null; // "block" or "unblock"
+
+  // This is called if dragging mouse click
+  function applyPaint(cell) {
+    if (paintMode === 'block') {
+      cell.dataset.blocked = 'true';
+      cell.classList.add('blocked');
+    } else if (paintMode === 'unblock') {
+      cell.dataset.blocked = 'false';
+      cell.classList.remove('blocked');
+    }
+  }
+
+  // Basically two modes of input:
+  // 1) Single‐click toggle
+  container.addEventListener('click', e => {
+    if (!e.target.classList.contains('grid-cell')) return;
+    const cell = e.target;
+    const blocked = cell.dataset.blocked === 'true';
+    cell.dataset.blocked = (!blocked).toString();
+    cell.classList.toggle('blocked', !blocked);
+  });
+
+  // 2) Brush‐painting on drag
+  container.addEventListener('mousedown', e => {
+    if (!e.target.classList.contains('grid-cell')) return;
+    isMouseDown = true;
+    // decide if we're blocking or unblocking
+    paintMode = e.target.dataset.blocked === 'true' ? 'unblock' : 'block';
+    applyPaint(e.target);
+    e.preventDefault(); // prevents text selection
+  });
+
+  container.addEventListener('mouseover', e => {
+    if (!isMouseDown) return;
+    if (!e.target.classList.contains('grid-cell')) return;
+    applyPaint(e.target);
+  });
+
+  window.addEventListener('mouseup', () => {
+    isMouseDown = false;
+    paintMode = null;
+  });
+  // -----------------------
+
+
   // Grab manifest
   const manifest = chrome.runtime.getManifest();
   console.log('manifest', manifest);
@@ -345,11 +526,6 @@ document.addEventListener('DOMContentLoaded', () => {
       renderSimilarShapeCombination(filtered, rawProfs, strict, forbiddenSlots, cols, table, headerTemplate); 
     });    
 
-    if (similarShapeCombinations.size === 0) {
-      results.innerHTML = '<p>⚠️ No matching combinations found.</p>';
-      return;
-    }
-
     // Append the table first
     currentStart = 0;
     results.appendChild(table);
@@ -622,6 +798,136 @@ document.addEventListener('DOMContentLoaded', () => {
       observer.disconnect();
       sentinel.remove();
     }
+  }
+
+  function renderSimilarShapeCombination(groups, rawProfs, strict, forbiddenSlots, cols, table, headerTemplate) {
+    const shapeSummaries = Array.from(similarShapeCombinations.entries()).map(
+      ([shapeKey, groupsForShape]) => {
+        const slots = shapeKey.split(',').map(pair => {
+          const [day, slot] = pair.split('|');
+          return { day: day, slot: parseFloat(slot) };
+        });
+
+        return { slots, groupsForShape }
+      }
+    );
+    console.log('shapeSummaries', shapeSummaries);   
+
+    // TODO: render here visually
+    const end = Math.min(shapeSummaries.length, currentStart + CHUNK_SIZE); // For deciding how many to show at once initially
+
+    const slotHeight = 15;
+    const dayWidth = 124.19;
+
+    shapeSummaries.forEach(({ slots, groupsForShape }, shapeIndex) => {
+      // wrapper + header
+      const comboWrapper = document.createElement('div');
+      comboWrapper.classList.add('combo-wrapper');
+
+      const hdr = document.createElement('div');
+      hdr.classList.add('combo-header');
+      hdr.innerHTML = `<div class="combo-number">Shape ${shapeIndex + 1}</div>`;
+      comboWrapper.appendChild(hdr);
+
+      // grid container
+      const timetableCombo = document.createElement('div');
+      timetableCombo.classList.add('timetable-combo');
+
+      // column headers
+      ['Mon','Tue','Wed','Thu','Fri','Sat'].forEach((d,i) => {
+        const dh = document.createElement('div');
+        dh.classList.add('day-header');
+        dh.style.gridColumn = (i+2).toString();
+        dh.textContent = d;
+        timetableCombo.appendChild(dh);
+      });
+
+      // row labels
+      for (let slot=0; slot<25; slot++){
+        const hour = 7+Math.floor(slot/2),
+              min  = slot%2?'30':'00',
+              ampm = hour<12?'AM':'PM',
+              h12  = ((hour+11)%12)+1;
+        const lbl = document.createElement('div');
+        lbl.classList.add('time-label');
+        lbl.style.gridRow = (slot+2).toString();
+        lbl.textContent = `${h12}:${min} ${ampm}`;
+        timetableCombo.appendChild(lbl);
+      }
+
+      // 3) Collect _all_ sessions in this shape
+      const sessions = [];
+      groupsForShape.forEach(group => {
+        group.forEach(item => {
+          const course = Object.keys(item)[0];
+          item[course].forEach(sectionObj => {
+            const section = Object.keys(sectionObj)[0];
+            sectionObj[section].forEach(detail => {
+              const days = dayMap[detail.Day] || [];
+              const [s,e] = timeToSlots(detail.Time);
+              days.forEach(fullDay => {
+                const dayIdx = ['Mon','Tue','Wed','Thu','Fri','Sat']
+                                .indexOf(fullDay.slice(0,3));
+                if (dayIdx >= 0) {
+                  sessions.push({
+                    dayIdx, s, e,
+                    label: `${course} ${section}`
+                  });
+                }
+              });
+            });
+          });
+        });
+      });
+
+      // 4) Cluster identical (dayIdx, s, e)
+      const shapeMap = new Map();
+      sessions.forEach(sess => {
+        const key = `${sess.dayIdx}|${sess.s}|${sess.e}`;
+        if (!shapeMap.has(key)) shapeMap.set(key, []);
+        shapeMap.get(key).push(sess);
+      });
+
+      // 5) Draw one <div class="block"> per cluster
+      shapeMap.forEach(arr => {
+        const { dayIdx, s, e } = arr[0];
+        const block = document.createElement('div');
+        block.classList.add('block');
+        block.style.left   = `${(dayIdx+1)*dayWidth - 67}px`;
+        block.style.width  = `${dayWidth-2}px`;
+        block.style.top    = `${s*slotHeight - 10}px`;
+        block.style.height = `${(e-s)*slotHeight}px`;
+
+        // tooltip list of all labels in this block
+        block.title = arr.map(x => x.label).join('\n');
+        const sessionLabels = arr.map(x => x.label).join("\n");
+        block.setAttribute('data-sessions', sessionLabels);
+
+        // show the first course inside
+        block.innerHTML = `<strong>${arr[0].label}</strong>`;
+        timetableCombo.appendChild(block);
+      });
+
+
+      anyRendered = true;
+      comboWrapper.appendChild(timetableCombo);
+      results.appendChild(comboWrapper);
+    });
+
+    currentStart = end;
+
+    // console.log('sentinel', sentinel);
+
+    // Append the sentinel at the bottom after each chunk is rendered
+    if (currentStart < shapeSummaries.length) {
+      results.appendChild(sentinel);
+    }
+
+    if (currentStart >= shapeSummaries.length) {
+      observer.disconnect();
+      sentinel.remove();
+    }
+
   }
 
   function renderSimilarShapeCombination(groups, rawProfs, strict, forbiddenSlots, cols, table, headerTemplate) {
