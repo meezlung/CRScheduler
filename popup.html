@@ -256,6 +256,22 @@
       overflow: hidden;
       line-height: 1.1em;
       margin-top: 25px;
+      pointer-events: auto;
+      z-index: 2;
+    }
+    
+    .block:hover::after {
+      min-width: 8em;
+      content: attr(data-sessions);    /* use your own data‑attribute */
+      position: absolute;
+      left: 0; top: 100%;
+      white-space: pre;                /* preserve newlines */
+      background: rgba(0,0,0,0.8);
+      color: #fff;
+      padding: 0.3em;
+      font-size: 0.75em;
+      border-radius: 3px;
+      z-index: 10;
     }
   </style>
 </head>
