@@ -13,6 +13,25 @@ function getBlockedTimes() {
   return blocked;
 }
 
+function probExactlyOne(ps) {
+  // Ensure all probabilities are numbers between 0 and 1
+  if (!Array.isArray(ps) || ps.some(p => typeof p !== 'number' || p < 0 || p > 1)) {
+    throw new Error('Input must be an array of numbers between 0 and 1');
+  }
+  return ps.reduce((sum, pi, i) => {
+    let term = pi;
+    for (let j = 0; j < ps.length; j++) {
+      if (j !== i) term *= (1 - ps[j]);
+    }
+    return sum + term;
+  }, 0);
+}
+
+function probAtLeastOne(ps) {
+  // ps is an array of 0…1 probabilities
+  return 1 - ps.reduce((prod, p) => prod * (1 - p), 1);
+}
+
 // TODO: small improvement is to memoize this
 function slotToTime(slot) {
   const hour = 7 + Math.floor(slot/2);
@@ -85,21 +104,16 @@ document.addEventListener('DOMContentLoaded', async () => {
   let isVisual = false;
   let lastArgs = null;
   document.getElementById('toggleView').addEventListener('click', () => {
-    if (!lastArgs) return; // nothing to show yet
+    if (!lastArgs) return; // Nothing to show yet
     isVisual = !isVisual;
     document.getElementById('toggleView').textContent = isVisual ? 'Switch to table view' : 'Switch to visual view';
     // Rerender with the same filters + data
     renderTable(...lastArgs);
   });
 
-
   // For dynamic rendering of table and infinite scrolling
   const CHUNK_SIZE = 20;
   let currentStart = 0;
-
-  // For detecting whether there are or no matches found when generating schedule combinations
-  let anyRendered = false;
-
 
   // Format the table at the sidebar by generating time slots with for loop, hard coding div's is tiring
   const container = document.querySelector('.grid-container');
@@ -233,9 +247,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
   const { preenlistment_priority, registration_priority } = prioJson;
 
-  // Fetch from latest RUPP website. NakaIIFE (Immediately Invoked Function Expression) para magexecute na agad. Don't have to reference it. 
-  // Since Promises resolve to Response in this case, we need to use await to avoid unresolved Promises. This fixes the 'RUPP1JSON' is not a function.
-  // Since we use await, we need to use async.
+  // Fetch from latest RUPP website.
+  // Since Promises resolve to Response in this case, we need to use await to avoid unresolved Promises. 
+  // This fixes the 'RUPP1JSON' is not a function.
+  // Since we use await, we need to use async in 'DOMContentLoaded
   const teacherMap = new Map();
 
   try {
@@ -273,7 +288,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const strictProfMatchCheckbox = document.getElementById('strictProfMatch');
 
     // I've put this here so that it awaits right away. This is a bug when I try to change the input box last second after clicking the fetchBtn
-    // Filter 1.0 Get raw prof input
     const rawProfs = faveProfsInput.value.split(',').map(s => s.trim().toLowerCase()).filter(s => s.length > 0);
     console.log('rawProfs', rawProfs);
 
@@ -305,7 +319,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     } else {
       // We need to do the ordinary fetching. Make sure to set in scheduleCache!
       try {
-        // 2. Get HTML pages for each course URL and scrape each table by calling the backend
+        // Get HTML pages for each course URL and scrape each table by calling the backend
         let allSchedules = [];
         let allCourseHTML = [];
         let isPreenlismentLink = false;
@@ -328,7 +342,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           // allCourseHTML.push(courseHtml);
         }
 
-        // 3. Ensure all URLs are of the same type
+        // Ensure all URLs are of the same type
         if (preenlistmentCount === urls.length) {
           endpointCall = '/scrape-links-preenlistment';
         } else if (registrationCount === urls.length) {
@@ -340,7 +354,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Temporarily
         endpointCall = '/test-schedules2';
 
-        // 4. Call the backend endpoint call
+        // Call the backend endpoint call
         let linkResponse;
         try {
           status.textContent = 'Processing URLs...'; // Temporarily
@@ -364,7 +378,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           throw err;
         }
 
-        // 5. Determine if HTML or text error muna yung nakuha na JSON from POST method
+        // Determine if HTML or text error muna yung nakuha na JSON from POST method
         const text = await linkResponse.text();
         let linkJSON;
         try {
@@ -377,7 +391,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (!linkJSON) {
           status.textContent = 'No schedules found.';
         } else {
-          console.log(linkJSON.data);
+          // console.log(linkJSON.data);
           // console.log('Ranked Sched', linkJSON.data);
           scheduleCache.set(urlKey, linkJSON.data); 
 
@@ -409,9 +423,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     const forbiddenSet = new Set(forbiddenSlots.map(({ day, slot }) => `${day}|${slot}`));
 
     // Optimization: We're now doing one pass of forbiddenSlots and one pass of occupiedSet first. Parsing each into {day|slot} format. Then, in the end, one pass of seeing their intersection. O(G*(S + F)).
-    return groups.filter(group => { // O(S)
-      const occupiedSet = new Set();
+    let filtered = groups.reduce((acc, group) => { // O(S)
+      let combinedProbability = 1;
 
+      // Filter 1: Forbidden time slots
+      const occupiedSet = new Set();
       group.forEach(item => {
         const courseKey = Object.keys(item)[0];
         const sectionArray = item[courseKey];  // [ { WFU: [...] }, … ]
@@ -423,7 +439,10 @@ document.addEventListener('DOMContentLoaded', async () => {
           schedules.forEach(details => {
             const days = dayMap[details.Day] || [];
             const [ startSlot, endSlot ] = timeToSlots(details.Time);
-            
+            if (details.Probability !== null) {
+              const prob = Math.max(0, details.Probability); // Make sure probabilities are nonnegative!
+              combinedProbability *= (Number(prob) / 100);
+            }
             days.forEach(day => {
               for (let slot = startSlot; slot <= endSlot; slot++) {
                 occupiedSet.add(`${day}|${slot}`);
@@ -437,7 +456,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       // We just need to find their intersection beautifully!
       for (let key of forbiddenSet) { // O(F)
         if (occupiedSet.has(key)) { // Note that .has is O(1)
-          return false;
+          return acc;
         }
       }
 
@@ -458,44 +477,49 @@ document.addEventListener('DOMContentLoaded', async () => {
         }
 
         // Check if any professor in rawProfs is in the Instructors string. If so, skip.
-        if (!includeGroup) return false;  // Skip this combo
+        if (!includeGroup) return acc;  // Skip this combo
       } 
 
       // Passed all the filters here! Nice!
       // We can insert the similar shape algorithm here by appending into a dictionary called similarShapeCombinations, with sorted concatenated time slots as keys, and courses as values.
             
-      // console.log('Filtered occupiedSet', occupiedSet);
-
-      // Sort the occupiedSet for consistent ordering (optional, for debugging or grouping)
+      // Sorting the occupiedSet will be useful for distinguishing actually unique keys
+      // We'll use this for making key of similarShapeCombinations Map
       const sortedOccupied = Array.from(occupiedSet).sort();
-      // You can use sortedOccupied instead of occupiedSet if you want a sorted array
-      // console.log('Sorted occupiedSet', sortedOccupied);
-
-      let timeSlotKey = sortedOccupied.join(',');
-
-      // console.log('timeSlotKey', timeSlotKey);
 
       // Append the current group (course details) to the similarShapeCombinations map
+      let timeSlotKey = sortedOccupied.join(',');
       if (!similarShapeCombinations.has(timeSlotKey)) { // If first time palang nakikita
         similarShapeCombinations.set(timeSlotKey, []);
       }
       similarShapeCombinations.get(timeSlotKey).push(group);
 
-      return true; 
-    });
+      combinedProbability *= 100;
+
+      acc.push({ group, combinedProbability });
+      return acc;
+    }, []);
+
+    // This is actually a good way of having descending order in an Array
+    // .sort here needs a comparison function 
+    // If positive, b comes first, then a goes second
+    // If negative, a comes first, then b goes second
+    // If 0, retain order
+    filtered.sort((a, b) => b.combinedProbability - a.combinedProbability);
+    return filtered.map(x => x.group);
   }
 
   function renderTable(groups, rawProfs, strict, forbiddenSlots) {
     lastArgs = [groups, rawProfs, strict, forbiddenSlots];
+
+    // For the toggle button 'Switch to visual or table view'
     const renderChunkFunction = isVisual ? renderVisualChunk : renderTableChunk;
 
     const filtered = getFilteredGroups(groups, rawProfs, strict, forbiddenSlots);
-    // console.log('filtered', filtered);
-    // console.log('similarShapeCombinations', similarShapeCombinations);
 
     status.textContent = `Generated ${filtered.length} combinations.`; // Show a status of how many schedule combination was generated and filtered
     
-    if (filtered.length === 0) {
+    if (filtered.length === 0 || similarShapeCombinations.size === 0) {
       results.innerHTML = '<p>⚠️ No matching combinations found.</p>';
       return;
     }
@@ -503,6 +527,68 @@ document.addEventListener('DOMContentLoaded', async () => {
     results.scrollTop = 0; // This fixes the not resetting the scroll to top bug!
     results.innerHTML = ''; // Clear everything
 
+    // Add a new button here that listens to activate renderSimilarShapeCombination
+    const similarShapeBtn = document.getElementById('showSimilar');
+
+    similarShapeBtn.addEventListener('click', () => {
+      currentStart = 0;
+      results.scrollTop = 0;
+      results.innerHTML = '';
+      
+      // Show the sentinel once, at the very bottom of the content
+      sentinel = document.createElement('div');
+      sentinel.id = 'load-sentinel';
+      results.appendChild(sentinel);
+
+      // Set up the IntersectionObserver
+      const options = {
+        root: results, // Watch within scrollable `#results`
+        rootMargin: '0px',
+        threshold: 1 // Sentinel must be fully in view
+      };
+      observer = new IntersectionObserver(entries => {
+        if (entries[0].isIntersecting) { // This acts like a callback
+          renderSimilarShapeCombination(); 
+        }
+      }, options);
+
+      renderSimilarShapeCombination();
+       
+      // Observe the sentinel for when it's in view
+      observer.observe(sentinel);
+    });
+
+    // Append the table first
+    currentStart = 0;
+
+    // Show the sentinel once, at the very bottom of the content
+    sentinel = document.createElement('div');
+    sentinel.id = 'load-sentinel';
+    results.appendChild(sentinel);
+
+    // Set up the IntersectionObserver
+    const options = {
+      root: results, // Watch within scrollable `#results`
+      rootMargin: '0px',
+      threshold: 1 // Sentinel must be fully in view
+    };
+    observer = new IntersectionObserver(entries => {
+      if (entries[0].isIntersecting) { // This acts like a callback
+        renderChunkFunction(filtered);
+      }
+    }, options);
+
+    // Render the first <= 20 schedule combinations
+    renderChunkFunction(filtered);
+
+    // Observe the sentinel for when it's in view
+    observer.observe(sentinel);
+
+    switchViewBtn.disabled = false;
+    showSimilarBtn.disabled = false;
+  }
+
+  function renderTableChunk(groups) {
     const cols = ['Course','Section','Day','Time','Instructors','Probability'];
     const table = document.createElement('table');
     table.classList.add('sched-table');
@@ -516,80 +602,27 @@ document.addEventListener('DOMContentLoaded', async () => {
       headerTemplate.appendChild(th);
     });
 
-    if (similarShapeCombinations.size === 0) {
-      results.innerHTML = '<p>⚠️ No matching combinations found.</p>';
-      return;
-    }
-
-    // Add a new button here that listens to activate renderSimilarShapeCombination
-    const similarShapeBtn = document.getElementById('showSimilar');
-
-    similarShapeBtn.addEventListener('click', () => {
-      results.innerHTML = '';
-      renderSimilarShapeCombination(); 
-    });    
-
-    // Append the table first
-    currentStart = 0;
+    // Table on top!
     results.appendChild(table);
 
-    // Show the sentinel once, at the very bottom of the content
-    sentinel = document.createElement('div');
-    sentinel.id = 'load-sentinel';
-    results.appendChild(sentinel);
-
-    // Set up the IntersectionObserver
-    const options = {
-      root: results, // Watch within scrollable `#results`
-      rootMargin: '0px',
-      threshold: 1 // sentinel must be fully in view
-    };
-    observer = new IntersectionObserver(entries => {
-      console.log("isIntersecting", entries[0].isIntersecting);
-      if (entries[0].isIntersecting) { // This acts like a callback
-        console.log("Intersection Current Start", currentStart);
-        renderChunkFunction(filtered, rawProfs, strict, forbiddenSlots, cols, table, headerTemplate);
-      }
-    }, options);
-
-    // Render the first <= 20 schedule combinations
-    renderChunkFunction(filtered, rawProfs, strict, forbiddenSlots, cols, table, headerTemplate, observer, sentinel);
-
-    // Observe the sentinel for when it's in view
-    observer.observe(sentinel);
-
-    switchViewBtn.disabled = false;
-    showSimilarBtn.disabled = false;
-
-    // If there are no combinations, show this message
-    if (!anyRendered) {
-      const noCombinationMsg = document.createElement('p');
-      noCombinationMsg.textContent = '⚠️ No matching combinations found.';
-      results.appendChild(noCombinationMsg)
-    }
-  }
-
-  function renderTableChunk(groups, rawProfs, strict, forbiddenSlots, cols, table, headerTemplate) {
     const end = Math.min(groups.length, currentStart + CHUNK_SIZE); // For deciding if how many to show at once initially
 
     for (let i = currentStart; i < end; i++) {
       const group = groups[i];
 
-      // 1) Group header
       const groupRow = table.insertRow();
       const cell = groupRow.insertCell();
       cell.colSpan = cols.length;
       cell.textContent = `Combination ${i + 1}`; 
       cell.classList.add('group-header');
       
-      // 2) Column headers
       const headerRow = headerTemplate.cloneNode(true);
       table.appendChild(headerRow);
 
-      // Collect average probability
-      let averageProbability = 0;
+      // Collect combined probability
+      let combinedProbability = 1;
 
-      // 3) For each course schedule in this group, add in a row
+      // For each course schedule in this group, add in a row
       group.forEach(item => {
         // Drill into your nested object exactly like before:
         const courseKey = Object.keys(item)[0];
@@ -628,6 +661,7 @@ document.addEventListener('DOMContentLoaded', async () => {
             const teacherKey = normalized.toLowerCase();
             const id = teacherMap.get(teacherKey);
 
+            // Set a RUPP link
             if (id) {
               instructorCell.innerHTML = 
               `
@@ -646,38 +680,42 @@ document.addEventListener('DOMContentLoaded', async () => {
             
             if (details.Probability !== null) {
               row.insertCell().textContent = String(Math.floor(details.Probability * 100) / 100) + '%';
-              // console.log('PROB', details.Probability);
-              averageProbability += Number(details.Probability); // also add for average
+              const prob = Math.max(0, details.Probability);
+              combinedProbability *= (Number(prob) / 100);
             } else {
               row.insertCell().textContent = '';
             }
-
-            anyRendered = true;
           })
         })
       });
 
-      // 4) Insert average probability at the last col
-      // Label 'Average Probability'
-      const averageRow = table.insertRow();
-      const averageCell = averageRow.insertCell();
-      averageCell.colSpan = cols.length - 1;
-      averageCell.style.textAlign = 'right';
-      averageCell.textContent = 'Average Probability:';
+      // Insert probability at the last col
+      const combinedProbabilityRow = table.insertRow();
+      const combinedProbabilityCell = combinedProbabilityRow.insertCell();
+      combinedProbabilityCell.colSpan = cols.length - 1; // Last col
+      combinedProbabilityCell.style.textAlign = 'right';
+      combinedProbabilityCell.textContent = 'Combined Probability:';
 
-      // Show actual average probability
-      const valueCell = averageRow.insertCell();
-      valueCell.textContent = (averageProbability / group.length).toFixed(2) + '%';
+      // Show actual combined probability by inserting another cell in the same row as its label
+      const valueCell = combinedProbabilityRow.insertCell();
+      valueCell.textContent = (combinedProbability * 100).toFixed(2) + '%';
       valueCell.style.fontWeight = 'bold';
 
-      // 5) Spacer
+      // Spacer
       const spacerRow = table.insertRow();
       const spacerCell = spacerRow.insertCell();
       spacerCell.colSpan = cols.length;
       spacerCell.classList.add('group-spacer');
     }
 
+    // Start from here again
     currentStart = end;
+
+    // IMPORTANT! Append the sentinel at the bottom after each chunk is rendered to trigger infinite scrolling everytime
+    // We don't need the observer and sentinel when all schedule combination has been rendered
+    if (currentStart < groups.length) {
+      results.appendChild(sentinel);
+    }
 
     if (currentStart >= groups.length) {
       observer.disconnect();
@@ -685,9 +723,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
   }
 
-  function renderVisualChunk(groups, rawProfs, strict, forbiddenSlots, cols, table, headerTemplate) {
+  function renderVisualChunk(groups) {
     const end = Math.min(groups.length, currentStart + CHUNK_SIZE); // For deciding how many to show at once initially
 
+    // TODO: find more dynamic way of doing this? Hardcoded it because absolute position is a pain in the butt...
     const slotHeight = 15;
     const dayWidth = 124.19;
 
@@ -705,7 +744,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       combinationNumber.textContent = `Combination ${i + 1}`; // Shows Combination #1, #2, etc.
       combinationHeader.appendChild(combinationNumber)
 
-      let averageProbability = 0;
+      let combinedProbability = 1;
 
       const averageProbabilityHeader = document.createElement('div');
       averageProbabilityHeader.classList.add('combo-probability');
@@ -713,7 +752,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       const timetableCombo = document.createElement('div');
       timetableCombo.classList.add('timetable-combo');
 
-      // 1) Day headers (row 1, cols 2–7)
+      // Day headers (row 1, cols 2–7)
       ['Mon','Tue','Wed','Thu','Fri','Sat'].forEach((day, idx) => {
         const dayHeader = document.createElement('div');
         dayHeader.classList.add('day-header');
@@ -722,7 +761,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         timetableCombo.appendChild(dayHeader);
       });
 
-      // 2) Time labels (col 1, rows 2–26)
+      // Time labels (col 1, rows 2–26)
       for (let slot = 0; slot < 25; slot++) {
         const hour = 7 + Math.floor(slot / 2)
         const min = slot % 2 ? '30' : '00'
@@ -735,7 +774,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         timetableCombo.appendChild(label);
       }
 
-      // 3) Each meeting -> one block
+      // Each meeting -> one block
       group.forEach(item => {
         const course = Object.keys(item)[0];
         item[course].forEach(sectionObj => {
@@ -743,11 +782,11 @@ document.addEventListener('DOMContentLoaded', async () => {
           sectionObj[section].forEach(details => {
             const days = dayMap[details.Day] || [];
             const [s, e] = timeToSlots(details.Time);
-            // console.log('time', details.Time, 'startTimeSlot', s, 'endTimeSlot', e);
             const probText = (details.Probability != null) ? `${Math.round(details.Probability * 100) / 100}%` : '';
             
             if (details.Probability !== null) {
-              averageProbability += Number(details.Probability); // also add for average
+              const prob = Math.max(0, details.Probability); // Make probabilities nonnegative!
+              combinedProbability *= (Number(prob) / 100);
             }
 
             days.forEach(fullDay => {
@@ -756,14 +795,11 @@ document.addEventListener('DOMContentLoaded', async () => {
               const block = document.createElement('div');
               block.classList.add('block');
 
-              // block.style.gridColumn = (dayIdx + 2).toString();
-              // block.style.gridRow = `${s + 2} / span ${e - s}`;
-
-              // position horizontally by day index
+              // Position horizontally by day index
               block.style.left = `${((dayIdx + 1) * dayWidth) - 67}px`;
               block.style.width = `${dayWidth - 2}px`; // account for border
 
-              // position vertically by start slot * slotHeight
+              // Position vertically by start slot * slotHeight
               block.style.top = `${(s * slotHeight) - 10}px`;
               block.style.height = `${(e - s) * slotHeight}px`; // this account for how much the sched lasts
               
@@ -778,24 +814,21 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
       });
 
-      // Append average probability to combinationHeader
-      averageProbabilityHeader.textContent = 'Average Probability: ' + (averageProbability / group.length).toFixed(2) + '%';
-      // averageProbabilityHeader.style.fontWeight = 'bold';
+      // Append combined probability to combinationHeader
+      averageProbabilityHeader.textContent = 'Combined Probability: ' + (combinedProbability * 100).toFixed(2) + '%';
       combinationHeader.appendChild(averageProbabilityHeader);
       comboWrapper.appendChild(combinationHeader);
 
-
       // Append the combo at the bottom of the container
-      anyRendered = true;
       comboWrapper.appendChild(timetableCombo);
       results.appendChild(comboWrapper);
     }
 
+    // Start from here again
     currentStart = end;
 
-    // console.log('sentinel', sentinel);
-
-    // Append the sentinel at the bottom after each chunk is rendered
+    // IMPORTANT! Append the sentinel at the bottom after each chunk is rendered to trigger infinite scrolling everytime
+    // We don't need the observer and sentinel when all schedule combination has been rendered
     if (currentStart < groups.length) {
       results.appendChild(sentinel);
     }
@@ -807,7 +840,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   }
 
   function renderSimilarShapeCombination() {
-    const shapeSummaries = Array.from(similarShapeCombinations.entries()).map(
+    let shapeSummaries = Array.from(similarShapeCombinations.entries()).map(
       ([shapeKey, groupsForShape]) => {
         const slots = shapeKey.split(',').map(pair => {
           const [day, slot] = pair.split('|');
@@ -817,66 +850,111 @@ document.addEventListener('DOMContentLoaded', async () => {
         return { slots, groupsForShape }
       }
     );
-    // console.log('shapeSummaries', shapeSummaries);   
 
-    const end = Math.min(shapeSummaries.length, currentStart + CHUNK_SIZE); // For deciding how many to show at once initially
-
-    const slotHeight = 15;
-    const dayWidth = 124.19;
-
-    shapeSummaries.forEach(({ slots, groupsForShape }, shapeIndex) => {
-      // wrapper + header
-      const comboWrapper = document.createElement('div');
-      comboWrapper.classList.add('combo-wrapper');
-
-      const hdr = document.createElement('div');
-      hdr.classList.add('combo-header');
-      hdr.innerHTML = `<div class="combo-number">Shape ${shapeIndex + 1}</div>`;
-      comboWrapper.appendChild(hdr);
-
-      // grid container
-      const timetableCombo = document.createElement('div');
-      timetableCombo.classList.add('timetable-combo');
-
-      // column headers
-      ['Mon','Tue','Wed','Thu','Fri','Sat'].forEach((d,i) => {
-        const dh = document.createElement('div');
-        dh.classList.add('day-header');
-        dh.style.gridColumn = (i+2).toString();
-        dh.textContent = d;
-        timetableCombo.appendChild(dh);
-      });
-
-      // row labels
-      for (let slot=0; slot<25; slot++){
-        const hour = 7+Math.floor(slot/2),
-              min  = slot%2?'30':'00',
-              ampm = hour<12?'AM':'PM',
-              h12  = ((hour+11)%12)+1;
-        const lbl = document.createElement('div');
-        lbl.classList.add('time-label');
-        lbl.style.gridRow = (slot+2).toString();
-        lbl.textContent = `${h12}:${min} ${ampm}`;
-        timetableCombo.appendChild(lbl);
-      }
-
-      // 3) Collect _all_ sessions in this shape
-      const sessions = [];
+    // Sort first before rendering
+    shapeSummaries = shapeSummaries.map(({ slots, groupsForShape }) => {
+      // Collect per‐course section‑probabilities
+      const courseMap = new Map();
       groupsForShape.forEach(group => {
         group.forEach(item => {
           const course = Object.keys(item)[0];
           item[course].forEach(sectionObj => {
             const section = Object.keys(sectionObj)[0];
-            sectionObj[section].forEach(detail => {
-              const days = dayMap[detail.Day] || [];
-              const [s,e] = timeToSlots(detail.Time);
+            sectionObj[section].forEach(details => {
+              if (details.Probability != null) {
+                const p = Math.max(0, Number(details.Probability)) / 100;
+                if (!courseMap.has(course)) courseMap.set(course, []);
+                courseMap.get(course).push(p);
+              }
+            });
+          });
+        });
+      });
+
+      // Multiply each “at‑least‑one‑section” probability together
+      let shapeProbability = 1;
+      for (let sectionPs of courseMap.values()) {
+        shapeProbability *= probAtLeastOne(sectionPs);
+      }
+
+      return { slots, groupsForShape, combinedProbability: shapeProbability };
+    });
+    shapeSummaries.sort((a, b) => b.combinedProbability - a.combinedProbability); // Again one liner descending sort
+
+    status.textContent = `Generated ${shapeSummaries.length} similar shape combinations.`
+
+    // This is for having infinite scrolling
+    const frag = document.createDocumentFragment();
+
+    // TODO: Refactor this as it has almost the same functionality as renderVisualChunk (tbh I just copy pasted from renderVisualChunk)
+    const end = Math.min(shapeSummaries.length, currentStart + CHUNK_SIZE); // For deciding how many to show at once initially
+
+    const slotHeight = 15;
+    const dayWidth = 124.19;
+
+   for (let i = currentStart; i < end; i++) {
+      const { groupsForShape } = shapeSummaries[i]; 
+      const comboWrapper = document.createElement('div');
+      comboWrapper.classList.add('combo-wrapper');
+
+      const combinationHeader = document.createElement('div');
+      combinationHeader.classList.add('combo-header');
+
+      const combinationNumber = document.createElement('div');
+      combinationNumber.classList.add('combo-number');      
+      combinationNumber.textContent = `Same Shape ${i + 1}`; // Shows Combination #1, #2, etc.
+      combinationHeader.appendChild(combinationNumber)
+
+      let combinedProbability = 1;
+
+      const averageProbabilityHeader = document.createElement('div');
+      averageProbabilityHeader.classList.add('combo-probability');
+
+      const timetableCombo = document.createElement('div');
+      timetableCombo.classList.add('timetable-combo');
+
+      // Day headers (row 1, cols 2–7)
+      ['Mon','Tue','Wed','Thu','Fri','Sat'].forEach((day, idx) => {
+        const dayHeader = document.createElement('div');
+        dayHeader.classList.add('day-header');
+        dayHeader.style.gridColumn = (idx + 2).toString(); // cols 2-7
+        dayHeader.textContent = day;
+        timetableCombo.appendChild(dayHeader);
+      });
+
+      // Time labels (col 1, rows 2–26)
+      for (let slot = 0; slot < 25; slot++) {
+        const hour = 7 + Math.floor(slot / 2)
+        const min = slot % 2 ? '30' : '00'
+        const ampm = hour < 12 ? 'AM' : 'PM'
+        const h12 = ((hour + 11) % 12) + 1;
+        const label = document.createElement('div');
+        label.classList.add('time-label');
+        label.style.gridRow = (slot + 2).toString();
+        label.textContent = `${h12}:${min} ${ampm}`;
+        timetableCombo.appendChild(label);
+      }
+
+      // Collect all sessions in this shape
+      const sessions = [];
+      groupsForShape.forEach(group => {
+        group.forEach(item => {
+          const courseKey = Object.keys(item)[0]; // e.g. Math 23
+          item[courseKey].forEach(sectionObj => {
+            const sectionKey = Object.keys(sectionObj)[0]; // e.g. HV-1
+            sectionObj[sectionKey].forEach(details => {
+              const days = dayMap[details.Day] || [];
+              const [s,e] = timeToSlots(details.Time);
+              const prob = details.Probability;
               days.forEach(fullDay => {
-                const dayIdx = ['Mon','Tue','Wed','Thu','Fri','Sat']
-                                .indexOf(fullDay.slice(0,3));
+                const dayIdx = ['Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(fullDay.slice(0,3));
                 if (dayIdx >= 0) {
                   sessions.push({
                     dayIdx, s, e,
-                    label: `${course} ${section}`
+                    course: courseKey,
+                    section: sectionKey,
+                    label: `${courseKey} ${sectionKey}`,
+                    probability: prob
                   });
                 }
               });
@@ -885,50 +963,92 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
       });
 
-      // 4) Cluster identical (dayIdx, s, e)
+      // Cluster identical (dayIdx, s, e)
       const shapeMap = new Map();
       sessions.forEach(sess => {
         const key = `${sess.dayIdx}|${sess.s}|${sess.e}`;
         if (!shapeMap.has(key)) {
           shapeMap.set(key, []);
         }
-
         // Only push if this label is not already present in the array for this key
         if (!shapeMap.get(key).some(existing => existing.label === sess.label)) {
           shapeMap.get(key).push(sess);
         }
       });
 
-
-      // 5) Draw one <div class="block"> per cluster
-      shapeMap.forEach(arr => {
-        const { dayIdx, s, e } = arr[0];
+      const courseMap = new Map();
+      // Draw one <div class="block"> per cluster
+      for (let [key, arr] of shapeMap.entries()) {
+        // Just for detecting the absolute positioning of each blocks
+        const { dayIdx, s, e, course, section, label, probability } = arr[0];
         const block = document.createElement('div');
         block.classList.add('block');
-        block.style.left   = `${(dayIdx+1)*dayWidth - 67}px`;
-        block.style.width  = `${dayWidth-2}px`;
-        block.style.top    = `${s*slotHeight - 10}px`;
+        block.style.left = `${(dayIdx+1)*dayWidth - 67}px`;
+        block.style.width = `${dayWidth-2}px`;
+        block.style.top = `${s*slotHeight - 10}px`;
         block.style.height = `${(e-s)*slotHeight}px`;
 
         const sessionLabels = arr.map(x => x.label).join("\n");
         block.setAttribute('data-sessions', sessionLabels);
 
-        // show the first course inside
+        // Build courseMap
+        for (const sess of arr) {
+          if (sess.probability === null) {
+            continue;
+          }
+
+          const rawProb = Number(sess.probability);
+          const courseProb = (rawProb >= 0) ? rawProb / 100 : 0;
+          const courseKey = sess.course;
+          const sectionKey = sess.section;
+
+          if (!courseMap.has(courseKey)) {
+            courseMap.set(courseKey, new Set());
+          }
+          
+          courseMap.get(courseKey).add(sectionKey + '|' + courseProb);
+        }
+
+        // Show all course inside the block
+        // Don't worry! In CSS, it is designed to have a scrollbar!
         block.innerHTML = arr.map(x => `<strong>${x.label}</strong>`).join('<br>');
         timetableCombo.appendChild(block);
-      });
+      };
 
+      // Based from the courseMap, in which it has the structure below, we get probExactlyOne of each CourseName
+      // {
+      //   CourseNameA: Set('SectionA|SectionProbA', 'SectionB|SectionProbB', ...),
+      //   CourseNameB: ...
+      // }
+      for (const [courseName, sectionSet] of courseMap.entries()) {
+        // Extract probabilities from 'Section|SectionProb' strings
+        const probs = Array.from(sectionSet).map(str => {
+          const [section, prob] = str.split('|');
+          return Number(prob);
+        });
+        // Calculate probability that at least one section is chosen for this course
+        const courseProb = probAtLeastOne(probs);
+        combinedProbability *= courseProb;
+      }
 
-      anyRendered = true;
+      // Append combined probability to combinationHeader
+      averageProbabilityHeader.textContent = 'Combined Probability: ' + (combinedProbability * 100).toFixed(2) + '%';
+      combinationHeader.appendChild(averageProbabilityHeader);
+      comboWrapper.appendChild(combinationHeader);
+
+      // Append the combo at the bottom of the container
       comboWrapper.appendChild(timetableCombo);
-      results.appendChild(comboWrapper);
-    });
+      frag.appendChild(comboWrapper);
+    };
 
+    // For infinite scrolling bug
+    results.append(frag);
+
+    // Start from here again
     currentStart = end;
 
-    // console.log('sentinel', sentinel);
-
-    // Append the sentinel at the bottom after each chunk is rendered
+    // IMPORTANT! Append the sentinel at the bottom after each chunk is rendered to trigger infinite scrolling everytime
+    // We don't need the observer and sentinel when all schedule combination has been rendered
     if (currentStart < shapeSummaries.length) {
       results.appendChild(sentinel);
     }
