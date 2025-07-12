@@ -746,8 +746,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       let combinedProbability = 1;
 
-      const averageProbabilityHeader = document.createElement('div');
-      averageProbabilityHeader.classList.add('combo-probability');
+      const combinedProbabilityHeader = document.createElement('div');
+      combinedProbabilityHeader.classList.add('combo-probability');
 
       const timetableCombo = document.createElement('div');
       timetableCombo.classList.add('timetable-combo');
@@ -815,8 +815,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       });
 
       // Append combined probability to combinationHeader
-      averageProbabilityHeader.textContent = 'Combined Probability: ' + (combinedProbability * 100).toFixed(2) + '%';
-      combinationHeader.appendChild(averageProbabilityHeader);
+      combinedProbabilityHeader.textContent = 'Combined Probability: ' + (combinedProbability * 100).toFixed(2) + '%';
+      combinationHeader.appendChild(combinedProbabilityHeader);
       comboWrapper.appendChild(combinationHeader);
 
       // Append the combo at the bottom of the container
@@ -907,8 +907,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
       let combinedProbability = 1;
 
-      const averageProbabilityHeader = document.createElement('div');
-      averageProbabilityHeader.classList.add('combo-probability');
+      const combinedProbabilityHeader = document.createElement('div');
+      combinedProbabilityHeader.classList.add('combo-probability');
 
       const timetableCombo = document.createElement('div');
       timetableCombo.classList.add('timetable-combo');
@@ -1032,8 +1032,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
 
       // Append combined probability to combinationHeader
-      averageProbabilityHeader.textContent = 'Combined Probability: ' + (combinedProbability * 100).toFixed(2) + '%';
-      combinationHeader.appendChild(averageProbabilityHeader);
+      combinedProbabilityHeader.textContent = 'Combined Probability: ' + (combinedProbability * 100).toFixed(2) + '%';
+      combinationHeader.appendChild(combinedProbabilityHeader);
       comboWrapper.appendChild(combinationHeader);
 
       // Append the combo at the bottom of the container
