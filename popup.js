@@ -347,15 +347,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         for (let url of urls) {
           // Temporarily comment these
-          // status.textContent = `Processing ${url}...`;
+          status.textContent = `Processing ${url}...`;
 
           if (url.includes('/preenlistment')) preenlistmentCount++;
           if (url.includes('/student_registration')) registrationCount++;
 
-          // // fetch the course page HTML
-          // const courseResp = await fetch(url, { credentials: 'include' });
-          // const courseHtml = await courseResp.text();
-          // allCourseHTML.push(courseHtml);
+          // Fetch the course page HTML
+          const courseResp = await fetch(url, { credentials: 'include' });
+          const courseHtml = await courseResp.text();
+          allCourseHTML.push(courseHtml);
         }
 
         // Ensure all URLs are of the same type
@@ -367,8 +367,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           throw new Error('All URLs must be either preenlistment or registration links.');
         }
 
-        // Temporarily
-        endpointCall = '/test-schedules2';
+        // // Temporarily
+        // endpointCall = '/test-schedules2';
 
         // Call the backend endpoint call
         let linkResponse;
@@ -377,13 +377,16 @@ document.addEventListener('DOMContentLoaded', async () => {
           linkResponse = await fetch(
             `${BACKEND}${endpointCall}`, 
             {
-              method: 'GET',
+              method: 'POST',
               headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
               },
-              preenlistment_priority: preenlistment_priority,
-              registration_priority: registration_priority
+              body: JSON.stringify({
+                htmls: allCourseHTML,
+                preenlistment_priority,
+                registration_priority
+              })
             }
           );
           if (!linkResponse.ok) {
