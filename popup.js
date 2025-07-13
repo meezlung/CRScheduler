@@ -346,8 +346,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         let registrationCount = 0;
 
         for (let url of urls) {
-          // Temporarily comment these
-          status.textContent = `Processing ${url}...`;
+          // Remove "https://crs.upd.edu.ph/preenlistment/" from the URL before displaying
+          const displayUrl = url.replace("https://crs.upd.edu.ph/preenlistment/", "");
+          status.textContent = `Processing ${displayUrl}...`;
 
           if (url.includes('/preenlistment')) preenlistmentCount++;
           if (url.includes('/student_registration')) registrationCount++;
