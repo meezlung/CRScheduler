@@ -85,13 +85,19 @@ const dayMap = {
   "F": ["Friday"],
   "S": ["Saturday"],
   "Su": ["Sunday"],
-  "MWF": ["Monday", "Wednesday", "Friday"],
-  "TTh": ["Tuesday", "Thursday"],
-  "WF": ["Wednesday", "Friday"],
-  "TF": ["Tuesday", "Friday"],
-  "MW": ["Monday", "Wednesday"],
-  "MTWThF": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+  // "MWF": ["Monday", "Wednesday", "Friday"],
+  // "TTh": ["Tuesday", "Thursday"],
+  // "WF": ["Wednesday", "Friday"],
+  // "TF": ["Tuesday", "Friday"],
+  // "MW": ["Monday", "Wednesday"],
+  // "MTWThF": ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
 };
+
+const tokenPattern = new RegExp(Object.keys(dayMap).sort((a, b) => b.length - a.length).join("|"), 'g');
+
+function parseDays(dayCode) {
+  return (dayCode.match(tokenPattern) || []).flatMap(token => dayMap[token]);
+}
 
 // For caching -> { urlKey: JSON payload }
 const scheduleCache = new Map();
@@ -437,7 +443,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           const schedules = sectionObj[sectionName]; // [ {...}, {...} ]
 
           schedules.forEach(details => {
-            const days = dayMap[details.Day] || [];
+            const days = parseDays(details.Day);
             const [ startSlot, endSlot ] = timeToSlots(details.Time);
             if (details.Probability !== null) {
               const prob = Math.max(0, details.Probability); // Make sure probabilities are nonnegative!
@@ -780,7 +786,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         item[course].forEach(sectionObj => {
           const section = Object.keys(sectionObj)[0];
           sectionObj[section].forEach(details => {
-            const days = dayMap[details.Day] || [];
+            const days = parseDays(details.Day);
             const [s, e] = timeToSlots(details.Time);
             const probText = (details.Probability != null) ? `${Math.round(details.Probability * 100) / 100}%` : '';
             
@@ -943,7 +949,7 @@ document.addEventListener('DOMContentLoaded', async () => {
           item[courseKey].forEach(sectionObj => {
             const sectionKey = Object.keys(sectionObj)[0]; // e.g. HV-1
             sectionObj[sectionKey].forEach(details => {
-              const days = dayMap[details.Day] || [];
+              const days = parseDays(details.Day);
               const [s,e] = timeToSlots(details.Time);
               const prob = details.Probability;
               days.forEach(fullDay => {
