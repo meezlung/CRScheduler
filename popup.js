@@ -962,6 +962,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               const days = parseDays(details.Day);
               const [s,e] = timeToSlots(details.Time);
               const prob = details.Probability;
+              const instructors = details.Instructors;
               days.forEach(fullDay => {
                 const dayIdx = ['Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(fullDay.slice(0,3));
                 if (dayIdx >= 0) {
@@ -970,7 +971,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     course: courseKey,
                     section: sectionKey,
                     label: `${courseKey} ${sectionKey}`,
-                    probability: prob
+                    probability: prob,
+                    instructors: instructors
                   });
                 }
               });
@@ -1027,7 +1029,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Show all course inside the block
         // Don't worry! In CSS, it is designed to have a scrollbar!
-        block.innerHTML = arr.map(x => `<strong>${x.label}</strong>`).join('<br>');
+        block.innerHTML = arr.map(x => `<strong>${x.label} | ${x.instructors}</strong>`).join('<br><br>');
         timetableCombo.appendChild(block);
       };
 
