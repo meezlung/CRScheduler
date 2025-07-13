@@ -106,6 +106,13 @@ const scheduleCache = new Map();
 const similarShapeCombinations = new Map();
 
 document.addEventListener('DOMContentLoaded', async () => {
+  // Add loading animation here
+  const loading = document.getElementById('loading-overlay');
+  const loadingStatus = document.getElementById('loading-status');
+
+  // Show loading animation
+  loading.classList.remove('hidden'); 
+
   // This is for the visual or table view button
   let isVisual = false;
   let lastArgs = null;
@@ -229,7 +236,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Only fetch priority once!
   const status = document.getElementById('status');
-  status.textContent = 'Fetching priorities...';
+  loadingStatus.textContent = 'Fetching your registration priority...';
   // Get classmessages and scrape priorities HTML page
   const classMsgResp = await fetch('https://crs.upd.edu.ph/user/view/classmessages', {
     credentials: 'include'
@@ -260,7 +267,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const teacherMap = new Map();
 
   try {
-    status.textContent = 'Fetching RUPP data...'
+    loadingStatus.textContent = 'Fetching RUPP data...'
     const RUPP1Data = await fetch(`${BACKEND}/fetch-rupp1`);
     const RUPP1JSON = await RUPP1Data.json();
     RUPP1JSON.teachers.teachers.forEach(t => {
@@ -274,7 +281,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     clearBtn.disabled = false;  
   }
 
-  status.textContent = '';
+  loadingStatus.textContent = '';
+
+  // Stop loading animation here
+  loading.classList.add('hidden'); 
 
   document.getElementById('clearPaint').addEventListener('click', () => {
     document.querySelectorAll('.grid-cell').forEach(cell => {
@@ -522,8 +532,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const renderChunkFunction = isVisual ? renderVisualChunk : renderTableChunk;
 
     const filtered = getFilteredGroups(groups, rawProfs, strict, forbiddenSlots);
-
-    status.textContent = `Generated ${filtered.length} combinations.`; // Show a status of how many schedule combination was generated and filtered
     
     if (filtered.length === 0 || similarShapeCombinations.size === 0) {
       results.innerHTML = '<p>⚠️ No matching combinations found.</p>';
@@ -589,6 +597,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Observe the sentinel for when it's in view
     observer.observe(sentinel);
+
+    status.textContent = `Generated ${filtered.length} combinations.`; // Show a status of how many schedule combination was generated and filtered
 
     switchViewBtn.disabled = false;
     showSimilarBtn.disabled = false;
