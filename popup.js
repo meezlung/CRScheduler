@@ -106,6 +106,13 @@ const scheduleCache = new Map();
 const similarShapeCombinations = new Map();
 
 document.addEventListener('DOMContentLoaded', async () => {
+  // Add loading animation here
+  const loading = document.getElementById('loading-overlay');
+  const loadingStatus = document.getElementById('loading-status');
+
+  // Show loading animation
+  loading.classList.remove('hidden'); 
+
   // This is for the visual or table view button
   let isVisual = false;
   let lastArgs = null;
@@ -229,7 +236,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Only fetch priority once!
   const status = document.getElementById('status');
-  status.textContent = 'Fetching priorities...';
+  loadingStatus.textContent = 'Fetching your registration priority...';
   // Get classmessages and scrape priorities HTML page
   const classMsgResp = await fetch('https://crs.upd.edu.ph/user/view/classmessages', {
     credentials: 'include'
@@ -260,7 +267,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   const teacherMap = new Map();
 
   try {
-    status.textContent = 'Fetching RUPP data...'
+    loadingStatus.textContent = 'Fetching RUPP data...'
     const RUPP1Data = await fetch(`${BACKEND}/fetch-rupp1`);
     const RUPP1JSON = await RUPP1Data.json();
     RUPP1JSON.teachers.teachers.forEach(t => {
@@ -274,7 +281,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     clearBtn.disabled = false;  
   }
 
-  status.textContent = '';
+  loadingStatus.textContent = '';
+
+  // Stop loading animation here
+  loading.classList.add('hidden'); 
 
   document.getElementById('clearPaint').addEventListener('click', () => {
     document.querySelectorAll('.grid-cell').forEach(cell => {
@@ -336,16 +346,17 @@ document.addEventListener('DOMContentLoaded', async () => {
         let registrationCount = 0;
 
         for (let url of urls) {
-          // Temporarily comment these
-          // status.textContent = `Processing ${url}...`;
+          // Remove "https://crs.upd.edu.ph/preenlistment/" from the URL before displaying
+          const displayUrl = url.replace("https://crs.upd.edu.ph/preenlistment/", "");
+          status.textContent = `Processing ${displayUrl}...`;
 
           if (url.includes('/preenlistment')) preenlistmentCount++;
           if (url.includes('/student_registration')) registrationCount++;
 
-          // // fetch the course page HTML
-          // const courseResp = await fetch(url, { credentials: 'include' });
-          // const courseHtml = await courseResp.text();
-          // allCourseHTML.push(courseHtml);
+          // Fetch the course page HTML
+          const courseResp = await fetch(url, { credentials: 'include' });
+          const courseHtml = await courseResp.text();
+          allCourseHTML.push(courseHtml);
         }
 
         // Ensure all URLs are of the same type
@@ -357,8 +368,8 @@ document.addEventListener('DOMContentLoaded', async () => {
           throw new Error('All URLs must be either preenlistment or registration links.');
         }
 
-        // Temporarily
-        endpointCall = '/test-schedules2';
+        // // Temporarily
+        // endpointCall = '/test-schedules2';
 
         // Call the backend endpoint call
         let linkResponse;
@@ -367,13 +378,16 @@ document.addEventListener('DOMContentLoaded', async () => {
           linkResponse = await fetch(
             `${BACKEND}${endpointCall}`, 
             {
-              method: 'GET',
+              method: 'POST',
               headers: {
                 'Accept': 'application/json',
                 'Content-Type': 'application/json'
               },
-              preenlistment_priority: preenlistment_priority,
-              registration_priority: registration_priority
+              body: JSON.stringify({
+                htmls: allCourseHTML,
+                preenlistment_priority,
+                registration_priority
+              })
             }
           );
           if (!linkResponse.ok) {
@@ -522,8 +536,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     const renderChunkFunction = isVisual ? renderVisualChunk : renderTableChunk;
 
     const filtered = getFilteredGroups(groups, rawProfs, strict, forbiddenSlots);
-
-    status.textContent = `Generated ${filtered.length} combinations.`; // Show a status of how many schedule combination was generated and filtered
     
     if (filtered.length === 0 || similarShapeCombinations.size === 0) {
       results.innerHTML = '<p>⚠️ No matching combinations found.</p>';
@@ -589,6 +601,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Observe the sentinel for when it's in view
     observer.observe(sentinel);
+
+    status.textContent = `Generated ${filtered.length} combinations.`; // Show a status of how many schedule combination was generated and filtered
 
     switchViewBtn.disabled = false;
     showSimilarBtn.disabled = false;
@@ -952,6 +966,7 @@ document.addEventListener('DOMContentLoaded', async () => {
               const days = parseDays(details.Day);
               const [s,e] = timeToSlots(details.Time);
               const prob = details.Probability;
+              const instructors = details.Instructors;
               days.forEach(fullDay => {
                 const dayIdx = ['Mon','Tue','Wed','Thu','Fri','Sat'].indexOf(fullDay.slice(0,3));
                 if (dayIdx >= 0) {
@@ -960,7 +975,8 @@ document.addEventListener('DOMContentLoaded', async () => {
                     course: courseKey,
                     section: sectionKey,
                     label: `${courseKey} ${sectionKey}`,
-                    probability: prob
+                    probability: prob,
+                    instructors: instructors
                   });
                 }
               });
@@ -1017,7 +1033,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
         // Show all course inside the block
         // Don't worry! In CSS, it is designed to have a scrollbar!
-        block.innerHTML = arr.map(x => `<strong>${x.label}</strong>`).join('<br>');
+        block.innerHTML = arr.map(x => `<strong>${x.label} | ${x.instructors}</strong>`).join('<br><br>');
         timetableCombo.appendChild(block);
       };
 
