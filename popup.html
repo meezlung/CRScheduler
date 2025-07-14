@@ -33,6 +33,7 @@
       padding: 1em;
       box-sizing: border-box;
       overflow-y: auto; /* scrollbar */
+      position: relative;
     }
 
     .sidebar textarea,
@@ -298,6 +299,21 @@
       display: none;
     }
 
+    #loading-overlay-results {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.2em;
+      z-index: 999;
+    }
+
+    #loading-overlay-results.hidden { 
+      display: none;
+    }
+
     .spinner {
       width: 4em;
       height: 4em;
@@ -362,6 +378,10 @@
   </div>
 
   <div id="results">
+    <div id="loading-overlay-results" class="hidden">
+      <div class="spinner"></div>
+      <span id="loading-status-results">Loading...</span>
+    </div>
     <!-- tables will get appended here -->
   </div>
 

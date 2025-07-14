@@ -75,6 +75,23 @@ function timeToSlots(timeStr) {
   return [ toSlot(s), toSlot(e) ];
 }
 
+function disableButtons(fetchBtn, clearBtn, switchViewBtn, showSimilarBtn) {
+  fetchBtn.disabled = true;
+  clearBtn.disable = true;
+  switchViewBtn.disabled = true;
+  showSimilarBtn.disabled = true;
+}
+
+function enableButtons(fetchBtn, clearBtn, switchViewBtn, showSimilarBtn) {
+  // Prevent spam by disabling buttons for 1 second before enabling
+  setTimeout(() => {
+    fetchBtn.disabled = false;
+    clearBtn.disabled = false;
+    switchViewBtn.disabled = false;
+    showSimilarBtn.disabled = false;
+  }, 1000);
+}
+
 // Global map for day parsing, maybe there's a better way of doing this
 // TODO: improve this
 const dayMap = {
@@ -113,15 +130,92 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Show loading animation
   loading.classList.remove('hidden'); 
 
+  // While fetching student priority and RUPP data, buttons should be disabled 
+  const fetchBtn = document.getElementById('fetchBtn');
+  fetchBtn.disabled = true;  // Start disabled
+  const clearBtn = document.getElementById('clearPaint');
+  clearBtn.disabled = true; // Start disabled
+  const switchViewBtn = document.getElementById('toggleView');
+  switchViewBtn.disabled = true; // Start disabled
+  const showSimilarBtn = document.getElementById('showSimilar');
+  showSimilarBtn.disabled = true; // Start disabled
+
   // This is for the visual or table view button
   let isVisual = false;
   let lastArgs = null;
   document.getElementById('toggleView').addEventListener('click', () => {
     if (!lastArgs) return; // Nothing to show yet
-    isVisual = !isVisual;
-    document.getElementById('toggleView').textContent = isVisual ? 'Switch to table view' : 'Switch to visual view';
-    // Rerender with the same filters + data
-    renderTable(...lastArgs);
+    // Put loading animation here
+    results.innerHTML = `
+      <div id="loading-overlay-results" class="hidden">
+        <div class="spinner"></div>
+        <span id="loading-status-results">Loading...</span>
+      </div>
+    `;
+    const loadingResults = document.getElementById('loading-overlay-results');
+
+    disableButtons(fetchBtn, clearBtn, switchViewBtn, showSimilarBtn);
+
+    // Show loading animation
+    loadingResults.classList.remove('hidden');
+
+    // Allow DOM to update before rendering table
+    // Setting timeout here helps the DOM to show the loading animation first then do the heavy lifting next (rendering table)
+    setTimeout(() => {
+      isVisual = !isVisual;
+      document.getElementById('toggleView').textContent = isVisual ? 'Switch to table view' : 'Switch to visual view';
+      // Rerender with the same filters + data
+      renderTable(...lastArgs);
+      loadingResults.classList.add('hidden');
+      enableButtons(fetchBtn, clearBtn, switchViewBtn, showSimilarBtn);
+    }, 0);
+  });
+
+  // Add a new button here that listens to activate renderSimilarShapeCombination
+  document.getElementById('showSimilar').addEventListener('click', () => {
+    currentStart = 0;
+    results.scrollTop = 0;
+    // Put loading animation here
+    results.innerHTML = `
+      <div id="loading-overlay-results" class="hidden">
+        <div class="spinner"></div>
+        <span id="loading-status-results">Loading...</span>
+      </div>
+    `;
+    const loadingResults = document.getElementById('loading-overlay-results');
+    const loadingStatus = document.getElementById('loading-status-results');
+
+    disableButtons(fetchBtn, clearBtn, switchViewBtn, showSimilarBtn);
+
+    // Show loading animation
+    loadingResults.classList.remove('hidden');
+
+    setTimeout(() => {
+      // Show the sentinel once, at the very bottom of the content
+      sentinel = document.createElement('div');
+      sentinel.id = 'load-sentinel';
+      results.appendChild(sentinel);
+
+      // Set up the IntersectionObserver
+      const options = {
+        root: results, // Watch within scrollable `#results`
+        rootMargin: '0px',
+        threshold: 1 // Sentinel must be fully in view
+      };
+      observer = new IntersectionObserver(entries => {
+        if (entries[0].isIntersecting) { // This acts like a callback
+          renderSimilarShapeCombination();
+        }
+      }, options);
+
+      renderSimilarShapeCombination();
+      
+      // Observe the sentinel for when it's in view
+      observer.observe(sentinel);
+
+      loadingResults.classList.add('hidden');
+      enableButtons(fetchBtn, clearBtn, switchViewBtn, showSimilarBtn);
+    }, 0);
   });
 
   // For dynamic rendering of table and infinite scrolling
@@ -219,21 +313,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.error("⚠️ No backend URL configured!");
   }
 
-
-  // This part is for awaiting the Promise for both fetching priority and RUPP data
-  // While fetching student priority and RUPP data, buttons should be disabled 
-  const fetchBtn = document.getElementById('fetchBtn');
-  fetchBtn.disabled = true;  // Start disabled
-
-  const clearBtn = document.getElementById('clearPaint');
-  clearBtn.disabled = true; // Start disabled
-
-  const switchViewBtn = document.getElementById('toggleView');
-  switchViewBtn.disabled = true; // Start disabled
-
-  const showSimilarBtn = document.getElementById('showSimilar');
-  showSimilarBtn.disabled = true; // Start disabled
-
   // Only fetch priority once!
   const status = document.getElementById('status');
   loadingStatus.textContent = 'Fetching your registration priority...';
@@ -314,13 +393,28 @@ document.addEventListener('DOMContentLoaded', async () => {
     const results = document.getElementById('results');
     const raw = document.getElementById('urls').value.trim();
 
-    results.innerHTML = '';
-    status.textContent = '';
-
     if (!raw) {
       status.textContent = 'Please enter at least one URL.';
       return;
     }
+
+    // Put loading animation here
+    results.innerHTML = `
+      <div id="loading-overlay-results" class="hidden">
+        <div class="spinner"></div>
+        <span id="loading-status-results">Loading...</span>
+      </div>
+    `;
+    const loadingResults = document.getElementById('loading-overlay-results');
+    const loadingStatus = document.getElementById('loading-status-results');
+
+    // Show loading animation
+    loadingResults.classList.remove('hidden');
+
+    // Disable all buttons
+    disableButtons(fetchBtn, clearBtn, switchViewBtn, showSimilarBtn);
+
+    status.textContent = '';
 
     const urls = raw.split(',').map(u=>u.trim()).filter(u=>u);
     const urlKey = urls.slice().sort().join('');
@@ -330,7 +424,11 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (scheduleCache.has(urlKey)) {
       const cached = scheduleCache.get(urlKey); // This is now the previously fetched JSON with the same URL
       console.log("Using cached schedules!");
-      return renderTable(cached, rawProfs, strict, forbiddenSlots);
+      setTimeout(() => {
+        renderTable(cached, rawProfs, strict, forbiddenSlots);
+        loadingResults.classList.add('hidden');
+        enableButtons(fetchBtn, clearBtn, switchViewBtn, showSimilarBtn);
+      }, 0);
 
     } else {
       // We need to do the ordinary fetching. Make sure to set in scheduleCache!
@@ -348,7 +446,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         for (let url of urls) {
           // Remove "https://crs.upd.edu.ph/preenlistment/" from the URL before displaying
           const displayUrl = url.replace("https://crs.upd.edu.ph/preenlistment/", "");
-          status.textContent = `Processing ${displayUrl}...`;
+          loadingStatus.textContent = `Processing ${displayUrl}...`;
 
           if (url.includes('/preenlistment')) preenlistmentCount++;
           if (url.includes('/student_registration')) registrationCount++;
@@ -374,7 +472,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         // Call the backend endpoint call
         let linkResponse;
         try {
-          status.textContent = 'Processing URLs...'; // Temporarily
+          loadingStatus.textContent = 'Processing URLs...'; // Temporarily
           linkResponse = await fetch(
             `${BACKEND}${endpointCall}`, 
             {
@@ -391,9 +489,16 @@ document.addEventListener('DOMContentLoaded', async () => {
             }
           );
           if (!linkResponse.ok) {
-            throw new Error(`Backend returned status ${linkResponse.status}. Possibly because Preenlistment and Registration period is over.`);
+            setTimeout(() => {
+              renderTable(linkJSON.data, rawProfs, strict, forbiddenSlots);
+              loadingResults.classList.add('hidden');
+              enableButtons(fetchBtn, clearBtn, switchViewBtn, showSimilarBtn);
+            }, 0);
+
+            throw new Error(`Backend returned status ${linkResponse.status}. Might be registration is over or too many possible courses!`);
           }
         } catch (err) {
+          loadingResults.classList.add('hidden');
           status.textContent = 'Error contacting backend: ' + err.message;
           throw err;
         }
@@ -415,9 +520,14 @@ document.addEventListener('DOMContentLoaded', async () => {
           // console.log('Ranked Sched', linkJSON.data);
           scheduleCache.set(urlKey, linkJSON.data); 
 
+          loadingStatus.textContent = 'Rendering table...'
           currentStart = 0;
 
-          renderTable(linkJSON.data, rawProfs, strict, forbiddenSlots);
+          setTimeout(() => {
+            renderTable(linkJSON.data, rawProfs, strict, forbiddenSlots);
+            loadingResults.classList.add('hidden');
+            enableButtons(fetchBtn, clearBtn, switchViewBtn, showSimilarBtn);
+          }, 0);
         }
       } catch (err) {
         console.error(err);
@@ -543,16 +653,23 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     results.scrollTop = 0; // This fixes the not resetting the scroll to top bug!
-    results.innerHTML = ''; // Clear everything
+    results.innerHTML = `
+        <div id="loading-overlay-results" class="hidden">
+          <div class="spinner"></div>
+          <span id="loading-status-results">Loading...</span>
+        </div>
+      `; // Clear everything by showing loading animation
 
-    // Add a new button here that listens to activate renderSimilarShapeCombination
-    const similarShapeBtn = document.getElementById('showSimilar');
+    const loadingResults = document.getElementById('loading-overlay-results');
+    const loadingStatus = document.getElementById('loading-status-results');
 
-    similarShapeBtn.addEventListener('click', () => {
+    // Show loading animation
+    loadingResults.classList.remove('hidden');
+
+    setTimeout(() => {
+      // Append the table first
       currentStart = 0;
-      results.scrollTop = 0;
-      results.innerHTML = '';
-      
+
       // Show the sentinel once, at the very bottom of the content
       sentinel = document.createElement('div');
       sentinel.id = 'load-sentinel';
@@ -566,46 +683,23 @@ document.addEventListener('DOMContentLoaded', async () => {
       };
       observer = new IntersectionObserver(entries => {
         if (entries[0].isIntersecting) { // This acts like a callback
-          renderSimilarShapeCombination(); 
+          renderChunkFunction(filtered);
         }
       }, options);
 
-      renderSimilarShapeCombination();
-       
+      // Render the first <= 20 schedule combinations
+      renderChunkFunction(filtered);
+
       // Observe the sentinel for when it's in view
       observer.observe(sentinel);
-    });
 
-    // Append the table first
-    currentStart = 0;
+      status.textContent = `Generated ${filtered.length} combinations.`; // Show a status of how many schedule combination was generated and filtered
 
-    // Show the sentinel once, at the very bottom of the content
-    sentinel = document.createElement('div');
-    sentinel.id = 'load-sentinel';
-    results.appendChild(sentinel);
+      switchViewBtn.disabled = false;
+      showSimilarBtn.disabled = false;
 
-    // Set up the IntersectionObserver
-    const options = {
-      root: results, // Watch within scrollable `#results`
-      rootMargin: '0px',
-      threshold: 1 // Sentinel must be fully in view
-    };
-    observer = new IntersectionObserver(entries => {
-      if (entries[0].isIntersecting) { // This acts like a callback
-        renderChunkFunction(filtered);
-      }
-    }, options);
-
-    // Render the first <= 20 schedule combinations
-    renderChunkFunction(filtered);
-
-    // Observe the sentinel for when it's in view
-    observer.observe(sentinel);
-
-    status.textContent = `Generated ${filtered.length} combinations.`; // Show a status of how many schedule combination was generated and filtered
-
-    switchViewBtn.disabled = false;
-    showSimilarBtn.disabled = false;
+      loadingResults.classList.add('hidden');
+    }, 0);
   }
 
   function renderTableChunk(groups) {
