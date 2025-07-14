@@ -338,6 +338,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     throw new Error(prioJson.message || 'Failed to scrape priorities');
   }
   const { preenlistment_priority, registration_priority } = prioJson;
+  if (preenlistment_priority === '' && registration_priority === '') {
+    loadingStatus.textContent = 'Session expired. Login into CRS again.';
+    throw new Error('Session expired. Login into CRS again.');
+  }
 
   // Fetch from latest RUPP website.
   // Since Promises resolve to Response in this case, we need to use await to avoid unresolved Promises. 
@@ -444,8 +448,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         let registrationCount = 0;
 
         for (let url of urls) {
-          // Remove "https://crs.upd.edu.ph/preenlistment/" from the URL before displaying
-          const displayUrl = url.replace("https://crs.upd.edu.ph/preenlistment/", "");
+          // Remove "https://crs.upd.edu.ph/preenlistment/" or "https://crs.upd.edu.ph/student_registration/" from the URL before displaying
+          let displayUrl = url.replace("https://crs.upd.edu.ph/preenlistment/", "");
+          displayUrl = displayUrl.replace("https://crs.upd.edu.ph/student_registration/", "");
           loadingStatus.textContent = `Processing ${displayUrl}...`;
 
           if (url.includes('/preenlistment')) preenlistmentCount++;
@@ -493,8 +498,12 @@ document.addEventListener('DOMContentLoaded', async () => {
               loadingResults.classList.add('hidden');
               enableButtons(fetchBtn, clearBtn, switchViewBtn, showSimilarBtn);
             }, 0);
-
-            throw new Error(`Backend returned status ${linkResponse.status}. Might be registration is over or too many possible courses!`);
+            if (linkResponse.status === 400) {
+              throw new Error('Session expired. Please log in to CRS again.');
+            }
+            if (linkResponse.status === 500) {
+              throw new Error(`Backend returned status ${linkResponse.status}. Might be registration is over or too many possible courses!`);
+            }
           }
         } catch (err) {
           loadingResults.classList.add('hidden');
@@ -553,7 +562,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Optimization: We're now doing one pass of forbiddenSlots and one pass of occupiedSet first. Parsing each into {day|slot} format. Then, in the end, one pass of seeing their intersection. O(G*(S + F)).
     let filtered = groups.reduce((acc, group) => { // O(S)
-      let combinedProbability = 1;
+      let averageProbability = 0;
 
       // Filter 1: Forbidden time slots
       const occupiedSet = new Set();
@@ -569,8 +578,8 @@ document.addEventListener('DOMContentLoaded', async () => {
             const days = parseDays(details.Day);
             const [ startSlot, endSlot ] = timeToSlots(details.Time);
             if (details.Probability !== null) {
-              const prob = Math.max(0, details.Probability); // Make sure probabilities are nonnegative!
-              combinedProbability *= (Number(prob) / 100);
+              const prob = details.Probability; // Make sure probabilities are nonnegative!
+              averageProbability += (Number(prob));
             }
             days.forEach(day => {
               for (let slot = startSlot; slot <= endSlot; slot++) {
@@ -623,9 +632,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
       similarShapeCombinations.get(timeSlotKey).push(group);
 
-      combinedProbability *= 100;
+      averageProbability = averageProbability / group.length;
 
-      acc.push({ group, combinedProbability });
+      acc.push({ group, averageProbability });
       return acc;
     }, []);
 
@@ -634,7 +643,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     // If positive, b comes first, then a goes second
     // If negative, a comes first, then b goes second
     // If 0, retain order
-    filtered.sort((a, b) => b.combinedProbability - a.combinedProbability);
+    filtered.sort((a, b) => b.averageProbability - a.averageProbability);
     return filtered.map(x => x.group);
   }
 
