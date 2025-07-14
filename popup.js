@@ -490,7 +490,6 @@ document.addEventListener('DOMContentLoaded', async () => {
           );
           if (!linkResponse.ok) {
             setTimeout(() => {
-              renderTable(linkJSON.data, rawProfs, strict, forbiddenSlots);
               loadingResults.classList.add('hidden');
               enableButtons(fetchBtn, clearBtn, switchViewBtn, showSimilarBtn);
             }, 0);
