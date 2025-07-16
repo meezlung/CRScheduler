@@ -2,14 +2,14 @@ import { CRScraperPreenlistment } from "./utils/crscraper_preenlistment.js";
 import { CRScraperRegistration } from "./utils/crscraper_registration.js";
 
 const workerUrl = chrome.runtime.getURL('./schedule_worker.js');
-console.log('▶️ instantiating worker at', workerUrl);
+console.log('Instantiating worker at', workerUrl);
 
 let scheduleWorker;
 try {
   scheduleWorker = new Worker(workerUrl, { type: 'module' });
-  console.log('✔️ Worker object created', scheduleWorker);
+  console.log('Worker object created', scheduleWorker);
 } catch (err) {
-  console.error('🛑 Worker instantiation threw:', err);
+  console.error('Worker instantiation threw:', err);
 }
 
 function getBlockedTimes() {
