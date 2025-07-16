@@ -1,3 +1,17 @@
+import { CRScraperPreenlistment } from "./utils/crscraper_preenlistment.js";
+import { CRScraperRegistration } from "./utils/crscraper_registration.js";
+
+const workerUrl = chrome.runtime.getURL('./schedule_worker.js');
+console.log('▶️ instantiating worker at', workerUrl);
+
+let scheduleWorker;
+try {
+  scheduleWorker = new Worker(workerUrl, { type: 'module' });
+  console.log('✔️ Worker object created', scheduleWorker);
+} catch (err) {
+  console.error('🛑 Worker instantiation threw:', err);
+}
+
 function getBlockedTimes() {
   const blocked = [];
   document.querySelectorAll('.grid-cell').forEach(cell => {
@@ -11,20 +25,6 @@ function getBlockedTimes() {
     }
   });
   return blocked;
-}
-
-function probExactlyOne(ps) {
-  // Ensure all probabilities are numbers between 0 and 1
-  if (!Array.isArray(ps) || ps.some(p => typeof p !== 'number' || p < 0 || p > 1)) {
-    throw new Error('Input must be an array of numbers between 0 and 1');
-  }
-  return ps.reduce((sum, pi, i) => {
-    let term = pi;
-    for (let j = 0; j < ps.length; j++) {
-      if (j !== i) term *= (1 - ps[j]);
-    }
-    return sum + term;
-  }, 0);
 }
 
 function probAtLeastOne(ps) {
@@ -73,6 +73,15 @@ function timeToSlots(timeStr) {
   const toSlot = ({h, mm}) => ((h * 60 + mm) - (7 * 60)) / 30; // Don't floor this to output floating points. This is so that we account for 11:45, 12:45...
 
   return [ toSlot(s), toSlot(e) ];
+}
+
+// assume your existing timeToSlots returns [floatStart, floatEnd]
+function timeToSlotsBucketed(timeStr) {
+  const [rawStart, rawEnd] = timeToSlots(timeStr);
+  // floor the start into its half‑hour bin, ceil the end so you cover
+  const startSlot = Math.floor(rawStart);
+  const endSlot   = Math.ceil (rawEnd);
+  return [startSlot, endSlot];
 }
 
 function disableButtons(fetchBtn, clearBtn, switchViewBtn, showSimilarBtn) {
@@ -126,6 +135,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Add loading animation here
   const loading = document.getElementById('loading-overlay');
   const loadingStatus = document.getElementById('loading-status');
+  const loadingResults = document.getElementById('loading-overlay-results');
 
   // Show loading animation
   loading.classList.remove('hidden'); 
@@ -153,6 +163,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       </div>
     `;
     const loadingResults = document.getElementById('loading-overlay-results');
+    const loadingStatus = document.getElementById('loading-status-results');
 
     disableButtons(fetchBtn, clearBtn, switchViewBtn, showSimilarBtn);
 
@@ -219,8 +230,10 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // For dynamic rendering of table and infinite scrolling
-  const CHUNK_SIZE = 20;
+  const CHUNK_SIZE = 5;
   let currentStart = 0;
+  let sentinel; // Declare sentinel for use in infinite scrolling
+  let observer; // IntersectionObserver for sentinel
 
   // Format the table at the sidebar by generating time slots with for loop, hard coding div's is tiring
   const container = document.querySelector('.grid-container');
@@ -316,32 +329,26 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Only fetch priority once!
   const status = document.getElementById('status');
   loadingStatus.textContent = 'Fetching your registration priority...';
+
   // Get classmessages and scrape priorities HTML page
   const classMsgResp = await fetch('https://crs.upd.edu.ph/user/view/classmessages', {
     credentials: 'include'
   });
   const classMsgHtml = await classMsgResp.text();
 
-  // Feed the classmessages HTML page to /scrape-priority endpoint
-  // TOOD: Good optimization is to scrape in client side!
-  const prioResp = await fetch(`${BACKEND}/scrape-priority`, {
-    method: 'POST',
-    headers: {
-      'Accept': 'application/json',
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ html: classMsgHtml })
-  });
+  // DOM Parser
+  const crscraperPreenlistment = new CRScraperPreenlistment();
+  crscraperPreenlistment.getPriority(classMsgHtml);
+  const preenlistment_priority = crscraperPreenlistment.preenlistmentPriority;
+  const registration_priority = crscraperPreenlistment.registrationPriority;
 
-  const prioJson = await prioResp.json();
-  if (prioJson.status !== 'success') {
-    throw new Error(prioJson.message || 'Failed to scrape priorities');
-  }
-  const { preenlistment_priority, registration_priority } = prioJson;
-  if (preenlistment_priority === '' && registration_priority === '') {
+  if (preenlistment_priority === "" && registration_priority === "") {
     loadingStatus.textContent = 'Session expired. Login into CRS again.';
     throw new Error('Session expired. Login into CRS again.');
   }
+
+  console.log('Preenlistment Priority:', preenlistment_priority);
+  console.log('Registration Priority:', registration_priority);
 
   // Fetch from latest RUPP website.
   // Since Promises resolve to Response in this case, we need to use await to avoid unresolved Promises. 
@@ -424,6 +431,45 @@ document.addEventListener('DOMContentLoaded', async () => {
     const urlKey = urls.slice().sort().join('');
     console.log('urlKey', urlKey);
 
+    scheduleWorker.onmessage = (entry) => {
+      const { success, data, error } = entry.data;
+      const loadingResults = document.getElementById('loading-overlay-results');
+      if (success) {
+        console.log('Generated schedules from worker:', data);
+
+        // continue rendering as before
+        scheduleCache.set(urlKey, data); 
+        loadingStatus.textContent = 'Rendering table...';
+        currentStart = 0;
+
+        setTimeout(() => {
+          renderTable(data, rawProfs, strict, forbiddenSlots);
+        }, 0);
+
+        loadingResults.classList.add('hidden');
+        enableButtons(fetchBtn, clearBtn, switchViewBtn, showSimilarBtn);
+
+      } else {
+        console.error('Worker error:', error);
+        status.textContent = 'Error: ' + error;
+        loadingResults.classList.add('hidden');
+        enableButtons(fetchBtn, clearBtn, switchViewBtn, showSimilarBtn);
+      }
+    };
+    
+    scheduleWorker.onerror = e => {
+      console.error(
+        '🛑 Worker load/import error:',
+        'message=', e.message,
+        'filename=', e.filename,
+        'lineno=', e.lineno,
+        'colno=', e.colno
+      );
+    };
+    scheduleWorker.onmessageerror = e => {
+      console.error('🛑 Worker message error:', e);
+    };
+
     // IMPORTANT! To not fetch the same URLs over and over again, which makes it slow, we need to cache the JSON payload from the URLs.
     if (scheduleCache.has(urlKey)) {
       const cached = scheduleCache.get(urlKey); // This is now the previously fetched JSON with the same URL
@@ -443,6 +489,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         let isPreenlismentLink = false;
         let isRegistrationLink = false;
         let endpointCall = "";
+        let crscraper;
 
         let preenlistmentCount = 0;
         let registrationCount = 0;
@@ -459,84 +506,35 @@ document.addEventListener('DOMContentLoaded', async () => {
           // Fetch the course page HTML
           const courseResp = await fetch(url, { credentials: 'include' });
           const courseHtml = await courseResp.text();
+
+          // Then collect all HTMLs
           allCourseHTML.push(courseHtml);
         }
 
         // Ensure all URLs are of the same type
         if (preenlistmentCount === urls.length) {
           endpointCall = '/scrape-links-preenlistment';
+          crscraper = new CRScraperPreenlistment();
         } else if (registrationCount === urls.length) {
           endpointCall = '/scrape-links-registration';
+          crscraper = new CRScraperRegistration();
         } else {
           throw new Error('All URLs must be either preenlistment or registration links.');
         }
 
-        // // Temporarily
-        // endpointCall = '/test-schedules2';
+        crscraper.accessAllPossibleCourseSchedules(allCourseHTML);
 
-        // Call the backend endpoint call
-        let linkResponse;
-        try {
-          loadingStatus.textContent = 'Processing URLs...'; // Temporarily
-          linkResponse = await fetch(
-            `${BACKEND}${endpointCall}`, 
-            {
-              method: 'POST',
-              headers: {
-                'Accept': 'application/json',
-                'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({
-                htmls: allCourseHTML,
-                preenlistment_priority,
-                registration_priority
-              })
-            }
-          );
-          if (!linkResponse.ok) {
-            setTimeout(() => {
-              loadingResults.classList.add('hidden');
-              enableButtons(fetchBtn, clearBtn, switchViewBtn, showSimilarBtn);
-            }, 0);
-            if (linkResponse.status === 400) {
-              throw new Error('Session expired. Please log in to CRS again.');
-            }
-            if (linkResponse.status === 500) {
-              throw new Error(`Backend returned status ${linkResponse.status}. Might be registration is over or too many possible courses!`);
-            }
-          }
-        } catch (err) {
-          loadingResults.classList.add('hidden');
-          status.textContent = 'Error contacting backend: ' + err.message;
-          throw err;
-        }
+        // const scheduleGenerator = new ScheduleGenerator(crscraper.data);
+        // const generatedSchedules = scheduleGenerator.generateSchedules();
 
-        // Determine if HTML or text error muna yung nakuha na JSON from POST method
-        const text = await linkResponse.text();
-        let linkJSON;
-        try {
-          linkJSON = JSON.parse(text)
-        } catch(e) {
-          console.error('Non-JSON form!', endpointCall, text);
-          throw new Error('Backend error for ' + endpointCall);
-        }
+        loadingStatus.textContent = 'Generating schedules...';
 
-        if (!linkJSON) {
-          status.textContent = 'No schedules found.';
-        } else {
-          // console.log(linkJSON.data);
-          // console.log('Ranked Sched', linkJSON.data);
-          scheduleCache.set(urlKey, linkJSON.data); 
+        scheduleWorker.postMessage({
+          type: 'GENERATE_SCHEDULES',
+          payload: { scrapedData: crscraper.data, forbiddenSlots: forbiddenSlots }
+        });
 
-          loadingStatus.textContent = 'Rendering table...'
-          currentStart = 0;
 
-          setTimeout(() => {
-            renderTable(linkJSON.data, rawProfs, strict, forbiddenSlots);
-            loadingResults.classList.add('hidden');
-            enableButtons(fetchBtn, clearBtn, switchViewBtn, showSimilarBtn);
-          }, 0);
-        }
       } catch (err) {
         console.error(err);
         status.textContent = 'Error: ' + err.message;
@@ -576,13 +574,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
           schedules.forEach(details => {
             const days = parseDays(details.Day);
-            const [ startSlot, endSlot ] = timeToSlots(details.Time);
             if (details.Probability !== null) {
               const prob = details.Probability; // Make sure probabilities are nonnegative!
               averageProbability += (Number(prob));
             }
+            const [s, e] = timeToSlotsBucketed(details.Time);
             days.forEach(day => {
-              for (let slot = startSlot; slot <= endSlot; slot++) {
+              for (let slot = s; slot <= e; slot++) {
                 occupiedSet.add(`${day}|${slot}`);
               }
             });
@@ -654,7 +652,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const renderChunkFunction = isVisual ? renderVisualChunk : renderTableChunk;
 
     const filtered = getFilteredGroups(groups, rawProfs, strict, forbiddenSlots);
-    
+
     if (filtered.length === 0 || similarShapeCombinations.size === 0) {
       results.innerHTML = '<p>⚠️ No matching combinations found.</p>';
       return;
@@ -1090,7 +1088,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Cluster identical (dayIdx, s, e)
       const shapeMap = new Map();
       sessions.forEach(sess => {
-        const key = `${sess.dayIdx}|${sess.s}|${sess.e}`;
+        const key = `${sess.dayIdx}|${Math.floor(sess.s)}|${Math.ceil(sess.e)}`;
         if (!shapeMap.has(key)) {
           shapeMap.set(key, []);
         }
