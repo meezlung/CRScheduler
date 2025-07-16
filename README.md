@@ -1,7 +1,5 @@
 # CRS Scheduler
 
-TODO: documentation
-
 under development...
 
 demo:
