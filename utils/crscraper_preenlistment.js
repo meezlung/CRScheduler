@@ -39,13 +39,15 @@ export class CRScraperPreenlistment {
       if (!table) return;
       const rows = Array.from(table.querySelectorAll('tr')).slice(1);
       rows.forEach(row => {
+        const cells = Array.from(row.querySelectorAll('td'));
+        if (cells.length < 7) return;
+        if (!cells[1].querySelector('strong')) return;
+
         const text = row.textContent.trim();
-        
         if (text === "No matching results") {
           throw new Error('No matching results found or invalid course URL');
         }
 
-        const cells = Array.from(row.querySelectorAll('td'));
         if (cells.length) {
           this.appendSortedRowData(cells);
         }
