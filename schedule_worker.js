@@ -59,13 +59,6 @@ export class ScheduleGenerator {
    */
   sectionProbability(secObj) {
     const meets = Object.values(secObj)[0];
-    console.log('meets', meets);
-    console.log('meets? formatted', meets
-      .map(meet => {
-        const raw = Math.max(0, Number(meet.Probability));
-        return raw;
-      }).reduce((prod, x) => prod * x, 1));
-
     return meets
       .map(meet => {
         const raw = Math.max(0, Number(meet.Probability));
