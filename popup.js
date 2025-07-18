@@ -693,7 +693,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       observer.observe(sentinel);
 
       if (groups.length === 1000000) {
-        status.textContent = `Maximum of ${groups.length} combinations is allowed! Try to reduce number of combinations by filtering.`
+        status.textContent = `Maximum of ${groups.length} combinations is allowed! Try reducing number of combinations by filtering.`
       } else {
         status.textContent = `Generated ${filtered.length} combinations.`; // Show a status of how many schedule combination was generated and filtered
       }
