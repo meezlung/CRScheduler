@@ -1,8 +1,27 @@
 export class ScheduleGenerator {
   constructor(subjectsWithTime, forbiddenSlots = [], rawProfs = [], strict = false) {
-    this.subjectsWithTime = subjectsWithTime.sort(
-      (a,b) => Object.values(a)[0].length - Object.values(b)[0].length
-    );
+    // this.subjectsWithTime = subjectsWithTime.sort(
+    //   (a,b) => Object.values(a)[0].length - Object.values(b)[0].length
+    // );
+
+    this.subjectsWithTime = subjectsWithTime
+    .map(subj => {
+      const course = Object.keys(subj)[0];
+      const sections = subj[course].slice();
+      // Sort sections by descending single-section probability
+      sections.sort((a, b) => this.sectionProbability(b) - this.sectionProbability(a));
+      return { [course]: sections };
+    })
+    .sort((a, b) => {
+      // First by fewest sections
+      const lenA = Object.values(a)[0].length;
+      const lenB = Object.values(b)[0].length;
+      if (lenA !== lenB) return lenA - lenB;
+      // Then by the max section probability (descending)
+      const maxA = Math.max(...Object.values(a)[0].map(sec => this.sectionProbability(sec)));
+      const maxB = Math.max(...Object.values(b)[0].map(sec => this.sectionProbability(sec)));
+      return maxB - maxA;
+    });
 
     this.daysMapping = {
       "M": ["Monday"],
@@ -32,7 +51,26 @@ export class ScheduleGenerator {
     // For grouping similar shape schedule combinations
     this.similarShapeCombinations = new Map();
 
-    this.maxCombos = 1000000;
+    this.maxCombos = 500000;
+  }
+
+  /**
+   * Helper: compute section probability
+   */
+  sectionProbability(secObj) {
+    const meets = Object.values(secObj)[0];
+    console.log('meets', meets);
+    console.log('meets? formatted', meets
+      .map(meet => {
+        const raw = Math.max(0, Number(meet.Probability));
+        return raw;
+      }).reduce((prod, x) => prod * x, 1));
+
+    return meets
+      .map(meet => {
+        const raw = Math.max(0, Number(meet.Probability));
+        return raw;
+      }).reduce((prod, x) => prod * x, 1);
   }
 
   /**
@@ -125,6 +163,8 @@ export class ScheduleGenerator {
    * Record similar‑shape key for a combo
    */
   recordShape(combo){
+    const MAX_PER_SHAPE = 10;
+
     // flatten into day|slot strings
     const keys = combo.flatMap(item=> 
       Object.values(item)[0].flatMap(secObj=>
@@ -136,11 +176,11 @@ export class ScheduleGenerator {
       )
     ).sort();
     const key = keys.join(',');
-    if(!this.similarShapeCombinations.has(key)){
-      this.similarShapeCombinations.set(key,[]);
+    const bucket = this.similarShapeCombinations.get(key) || [];
+    if (bucket.length < MAX_PER_SHAPE) {
+      bucket.push(JSON.parse(JSON.stringify(combo))); // Deep clone
+      this.similarShapeCombinations.set(key, bucket);
     }
-    const snapshot = JSON.parse(JSON.stringify(combo));
-    this.similarShapeCombinations.get(key).push(snapshot);
   }
 
   /**
@@ -339,6 +379,9 @@ self.onmessage = ({ data }) => {
       // Only keep the heavy computation part here in the worker
       const scheduleGenerator = new ScheduleGenerator(scrapedData, forbiddenSlots, rawProfs, strict);
       const { generatedSchedules, similarShapeCombinations } = scheduleGenerator.generateSchedules();
+
+      console.log('generatedSchedules', generatedSchedules);
+      console.log('similarSched', similarShapeCombinations);
 
       const endTime = performance.now();
       console.log(`Schedule generation took ${(endTime - startTime).toFixed(2)} ms`);
