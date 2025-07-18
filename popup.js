@@ -129,7 +129,7 @@ function parseDays(dayCode) {
 const scheduleCache = new Map();
 
 // For collecting similar structure of time slots
-const similarShapeCombinations = new Map();
+let similarShapeCombinations;
 
 document.addEventListener('DOMContentLoaded', async () => {
   // Add loading animation here
@@ -316,7 +316,7 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   // Grab manifest
   const manifest = chrome.runtime.getManifest();
-  console.log('manifest', manifest);
+  console.log('Manifest', manifest);
 
   // Then safely pull BACKEND URL, acts like a dotenv
   const BACKEND = manifest.crsConfig?.backendURL;
@@ -433,17 +433,19 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     scheduleWorker.onmessage = (entry) => {
       const { success, data, error } = entry.data;
+      similarShapeCombinations = data.similarShapeCombinations;
+      console.log('similarShapeCombinations', similarShapeCombinations);
+
       const loadingResults = document.getElementById('loading-overlay-results');
       if (success) {
-        console.log('Generated schedules from worker:', data);
+        console.log('Generated schedules from worker:', data.generatedSchedules);
 
-        // continue rendering as before
-        scheduleCache.set(urlKey, data); 
+        // Continue rendering as before
         loadingStatus.textContent = 'Rendering table...';
         currentStart = 0;
 
         setTimeout(() => {
-          renderTable(data, rawProfs, strict, forbiddenSlots);
+          renderTable(data.generatedSchedules, rawProfs, strict, forbiddenSlots);
         }, 0);
 
         loadingResults.classList.add('hidden');
@@ -470,75 +472,63 @@ document.addEventListener('DOMContentLoaded', async () => {
       console.error('🛑 Worker message error:', e);
     };
 
-    // IMPORTANT! To not fetch the same URLs over and over again, which makes it slow, we need to cache the JSON payload from the URLs.
-    if (scheduleCache.has(urlKey)) {
-      const cached = scheduleCache.get(urlKey); // This is now the previously fetched JSON with the same URL
-      console.log("Using cached schedules!");
-      setTimeout(() => {
-        renderTable(cached, rawProfs, strict, forbiddenSlots);
-        loadingResults.classList.add('hidden');
-        enableButtons(fetchBtn, clearBtn, switchViewBtn, showSimilarBtn);
-      }, 0);
+    try {
+      // Get HTML pages for each course URL and scrape each table by calling the backend
+      let allSchedules = [];
+      let allCourseHTML = [];
+      let isPreenlismentLink = false;
+      let isRegistrationLink = false;
+      let endpointCall = "";
+      let crscraper;
 
-    } else {
-      // We need to do the ordinary fetching. Make sure to set in scheduleCache!
-      try {
-        // Get HTML pages for each course URL and scrape each table by calling the backend
-        let allSchedules = [];
-        let allCourseHTML = [];
-        let isPreenlismentLink = false;
-        let isRegistrationLink = false;
-        let endpointCall = "";
-        let crscraper;
+      let preenlistmentCount = 0;
+      let registrationCount = 0;
 
-        let preenlistmentCount = 0;
-        let registrationCount = 0;
+      for (let url of urls) {
+        // Remove "https://crs.upd.edu.ph/preenlistment/" or "https://crs.upd.edu.ph/student_registration/" from the URL before displaying
+        let displayUrl = url.replace("https://crs.upd.edu.ph/preenlistment/", "");
+        displayUrl = displayUrl.replace("https://crs.upd.edu.ph/student_registration/", "");
+        loadingStatus.textContent = `Processing ${displayUrl}...`;
 
-        for (let url of urls) {
-          // Remove "https://crs.upd.edu.ph/preenlistment/" or "https://crs.upd.edu.ph/student_registration/" from the URL before displaying
-          let displayUrl = url.replace("https://crs.upd.edu.ph/preenlistment/", "");
-          displayUrl = displayUrl.replace("https://crs.upd.edu.ph/student_registration/", "");
-          loadingStatus.textContent = `Processing ${displayUrl}...`;
+        if (url.includes('/preenlistment')) preenlistmentCount++;
+        if (url.includes('/student_registration')) registrationCount++;
 
-          if (url.includes('/preenlistment')) preenlistmentCount++;
-          if (url.includes('/student_registration')) registrationCount++;
+        // Fetch the course page HTML
+        const courseResp = await fetch(url, { credentials: 'include' });
+        const courseHtml = await courseResp.text();
 
-          // Fetch the course page HTML
-          const courseResp = await fetch(url, { credentials: 'include' });
-          const courseHtml = await courseResp.text();
-
-          // Then collect all HTMLs
-          allCourseHTML.push(courseHtml);
-        }
-
-        // Ensure all URLs are of the same type
-        if (preenlistmentCount === urls.length) {
-          endpointCall = '/scrape-links-preenlistment';
-          crscraper = new CRScraperPreenlistment();
-        } else if (registrationCount === urls.length) {
-          endpointCall = '/scrape-links-registration';
-          crscraper = new CRScraperRegistration();
-        } else {
-          throw new Error('All URLs must be either preenlistment or registration links.');
-        }
-
-        crscraper.accessAllPossibleCourseSchedules(allCourseHTML);
-
-        // const scheduleGenerator = new ScheduleGenerator(crscraper.data);
-        // const generatedSchedules = scheduleGenerator.generateSchedules();
-
-        loadingStatus.textContent = 'Generating schedules...';
-
-        scheduleWorker.postMessage({
-          type: 'GENERATE_SCHEDULES',
-          payload: { scrapedData: crscraper.data, forbiddenSlots: forbiddenSlots }
-        });
-
-
-      } catch (err) {
-        console.error(err);
-        status.textContent = 'Error: ' + err.message;
+        // Then collect all HTMLs
+        allCourseHTML.push(courseHtml);
       }
+
+      // Ensure all URLs are of the same type
+      if (preenlistmentCount === urls.length) {
+        endpointCall = '/scrape-links-preenlistment';
+        crscraper = new CRScraperPreenlistment();
+      } else if (registrationCount === urls.length) {
+        endpointCall = '/scrape-links-registration';
+        crscraper = new CRScraperRegistration();
+      } else {
+        throw new Error('All URLs must be either preenlistment or registration links.');
+      }
+
+      crscraper.accessAllPossibleCourseSchedules(allCourseHTML);
+
+      // Migrated this into a scheduleWorker
+      // const scheduleGenerator = new ScheduleGenerator(crscraper.data);
+      // const generatedSchedules = scheduleGenerator.generateSchedules();
+
+      loadingStatus.textContent = 'Generating schedules...';
+
+      scheduleWorker.postMessage({
+        type: 'GENERATE_SCHEDULES',
+        payload: { scrapedData: crscraper.data, forbiddenSlots: forbiddenSlots, rawProfs: rawProfs, strict: strict }
+      });
+
+
+    } catch (err) {
+      console.error(err);
+      status.textContent = 'Error: ' + err.message;
     }
   });
 
@@ -651,7 +641,10 @@ document.addEventListener('DOMContentLoaded', async () => {
     // For the toggle button 'Switch to visual or table view'
     const renderChunkFunction = isVisual ? renderVisualChunk : renderTableChunk;
 
-    const filtered = getFilteredGroups(groups, rawProfs, strict, forbiddenSlots);
+    // const filtered_test = getFilteredGroups(groups, rawProfs, strict, forbiddenSlots);
+    // console.log('similar', similarShapeCombinations);
+
+    const filtered = groups;
 
     if (filtered.length === 0 || similarShapeCombinations.size === 0) {
       results.innerHTML = '<p>⚠️ No matching combinations found.</p>';
@@ -1012,7 +1005,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     const slotHeight = 15;
     const dayWidth = 124.19;
 
-   for (let i = currentStart; i < end; i++) {
+    for (let i = currentStart; i < end; i++) {
       const { groupsForShape } = shapeSummaries[i]; 
       const comboWrapper = document.createElement('div');
       comboWrapper.classList.add('combo-wrapper');
