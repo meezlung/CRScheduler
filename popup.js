@@ -692,7 +692,11 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Observe the sentinel for when it's in view
       observer.observe(sentinel);
 
-      status.textContent = `Generated ${filtered.length} combinations.`; // Show a status of how many schedule combination was generated and filtered
+      if (groups.length === 1000000) {
+        status.textContent = `Maximum of ${groups.length} combinations is allowed! Try to reduce number of combinations by filtering.`
+      } else {
+        status.textContent = `Generated ${filtered.length} combinations.`; // Show a status of how many schedule combination was generated and filtered
+      }
 
       switchViewBtn.disabled = false;
       showSimilarBtn.disabled = false;

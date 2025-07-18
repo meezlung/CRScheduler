@@ -31,6 +31,8 @@ export class ScheduleGenerator {
 
     // For grouping similar shape schedule combinations
     this.similarShapeCombinations = new Map();
+
+    this.maxCombos = 1000000;
   }
 
   /**
@@ -244,6 +246,8 @@ export class ScheduleGenerator {
    * Generates all possible schedule with given filter constraints
    */
   backtrack(idx, current, out, chosenSchedules){
+    if (out.length >= this.maxCombos) return; // Safety check to prevent crashing out the page
+
     if (idx===this.subjectsWithTime.length) {
       if (this.profOK(current)) {
         out.push([...current]);
@@ -254,6 +258,8 @@ export class ScheduleGenerator {
 
     const subj = this.subjectsWithTime[idx], course=Object.keys(subj)[0];
     for(let secObj of subj[course]){
+      if (out.length >= this.maxCombos) break;  // Another safety check just in case
+
       const section = Object.keys(secObj)[0], meets=secObj[section];
 
       // Prune forbidden
