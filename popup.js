@@ -230,7 +230,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // For dynamic rendering of table and infinite scrolling
-  const CHUNK_SIZE = 5;
+  const CHUNK_SIZE = 20;
   let currentStart = 0;
   let sentinel; // Declare sentinel for use in infinite scrolling
   let observer; // IntersectionObserver for sentinel
@@ -692,7 +692,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Observe the sentinel for when it's in view
       observer.observe(sentinel);
 
-      if (groups.length === 1000000) {
+      if (groups.length === 500000) {
         status.textContent = `Maximum of ${groups.length} combinations is allowed! Try reducing number of combinations by filtering.`
       } else {
         status.textContent = `Generated ${filtered.length} combinations.`; // Show a status of how many schedule combination was generated and filtered
