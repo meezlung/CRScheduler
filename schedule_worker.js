@@ -363,6 +363,7 @@ self.onmessage = ({ data }) => {
       postMessage({ success: true, data: { generatedSchedules, similarShapeCombinations } });
     } catch (err) {
       postMessage({ success: false, error: err.message });
+      throw new Error('Error in worker! ', err.message);
     }
   }
 };
