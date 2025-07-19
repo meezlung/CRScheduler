@@ -21,12 +21,9 @@ export class CRScraperPreenlistment {
       
       const key = cells[0].textContent.trim();
       const val = cells[1].textContent.trim();
-      
-      if (key.includes('Preenlistment Priority')) {
-        this.preenlistmentPriority = val;
-      } else if (key.includes('Registration Priority')) {
-        this.registrationPriority = val;
-      }
+
+      if (key.includes('Preenlistment Priority')) this.preenlistmentPriority = val;
+      else if (key.includes('Registration Priority')) this.registrationPriority = val;
     });
   }
 
@@ -40,103 +37,96 @@ export class CRScraperPreenlistment {
       const rows = Array.from(table.querySelectorAll('tr')).slice(1);
       rows.forEach(row => {
         const cells = Array.from(row.querySelectorAll('td'));
-        if (cells.length < 7) return;
-        if (!cells[1].querySelector('strong')) return;
-
-        const text = row.textContent.trim();
-        if (text === "No matching results") {
+        if (cells.length < 7 || !cells[1].querySelector('strong')) return;
+        if (row.textContent.trim() === "No matching results") {
           throw new Error('No matching results found or invalid course URL');
         }
-
-        if (cells.length) {
-          this.appendSortedRowData(cells);
-        }
+        this.appendSortedRowData(cells);
       });
     });
   }
 
   appendSortedRowData(cells) {
-    const courseSectionFull = cells[1].querySelector('strong')?.textContent.trim() || '';
-    // Handle cases like "Philo 1 THZ -1" where section may have extra spaces or tokens
-    const [course, section] = (() => {
-      const parts = courseSectionFull.split(' ');
-      // If last part is "-1" or similar, treat it as part of the section
-      if (parts.length > 2 && /^-?\d+$/.test(parts[parts.length - 1])) {
-        return [parts.slice(0, -2).join(' '), parts.slice(-2).join(' ')];
-      }
-      // Handles subjects like "App Physics 185" (course name with spaces and number)
-      if (parts.length > 2 && /^\d+$/.test(parts[parts.length - 1])) {
-        return [parts.slice(0, -1).join(' '), parts[parts.length - 1]];
-      }
-      return [parts.slice(0, -1).join(' '), parts[parts.length - 1]];
-    })();
-    
-    const formattedSchedule = this.formatSchedule(cells);
-    
-    let courseEntry = this.data.find(e => e[course]);
+    const brSplit = /(?:<br\s*\/?>\s*){2,}/gi;
 
-    if (!courseEntry) {
-      courseEntry = { [course]: [] };
-      this.data.push(courseEntry);
-    }
-    courseEntry[course].push({ [section]: formattedSchedule });
-  }
+    // Raw splits
+    const classCodes = cells[0].innerHTML.split(brSplit).map(s => s.replace(/<[^>]+>/g, '').trim()).filter(Boolean);
+    const creditsArr = cells[2].innerHTML.split(brSplit).map(s => parseFloat(s.replace(/<[^>]+>/g, '').trim())).filter(n => !isNaN(n));
+    const schedulesArr = cells[3].innerHTML.split(brSplit).map(s => s.replace(/<[^>]+>/g, '').trim()).filter(Boolean);
+    const instructorArr = Array.from(cells[1].innerHTML.matchAll(/<strong>.*?<\/strong><br>([^<]+)/gi)).map(m => m[1].trim());
 
-  formatSchedule(cells) {
-    // Extract course and section
-    const courseSectionFull = cells[1].querySelector('strong')?.textContent.trim() || '';
-    const sectionOnly = courseSectionFull.split(' ').pop();
+    // Dynamic slots/demand/remarks
+    const texts = cells.map(td => td.textContent.replace(/\u00a0/g, '').trim());
+    const slotIdx = texts.findIndex(t => /^\d+\s*\/\s*\d+$/.test(t));
+    const [availableSlots, totalSlots] = slotIdx >= 0 ? texts[slotIdx].split('/').map(n => parseInt(n, 10)) : [0, 0];
+    const demandIdx = texts.findIndex((t, i) => i > slotIdx && /^\d+$/.test(t));
+    const demand = demandIdx >= 0 ? parseInt(texts[demandIdx], 10) : 0;
+    const remarksIdx = texts.findIndex((t, i) => i > 1 && i < slotIdx);
+    const remarks = remarksIdx >= 0 ? texts[remarksIdx] : '';
 
-    // Extract instructor
-    const instructor = cells[1].innerHTML.split('<br>')[1]?.trim() || '';
+    // Pre-parse meets
+    const meetsArr = schedulesArr.map(block => block.split(/;\s*/).filter(Boolean).map(entry => {
+      const [day, time, ...roomParts] = entry.split(/\s+/);
+      return { Day: day, Time: time, Room: roomParts.join(' ') };
+    }));
 
-    // Extract schedule
-    let scheduleParts = cells[3].textContent.trim().split('\n');
-    if (scheduleParts.length === 1) {
-      scheduleParts = scheduleParts[0].split('; ');
-    }
+    const strongEls = Array.from(cells[1].querySelectorAll('strong'));
 
-    // Extract slots and demand
-    const availableAndTotalSlots = cells[5].textContent.trim().replace(/\u00a0/g, '').replace(/\n/g, '');
-    const [availableSlots, totalSlots] = availableAndTotalSlots.split('/').map(n => parseInt(n, 10));
-    const demand = parseInt(cells[6].textContent.trim().replace(/\u00a0/g, ''), 10);
+    // Merge if one block has zero credits (e.g. lab+lec grouping)
+    if (strongEls.length === 2 && (creditsArr[0] === 0 || creditsArr[1] === 0)) {
+      const zeroIdx = creditsArr[0] === 0 ? 0 : 1;
+      const realIdx = zeroIdx === 0 ? 1 : 0;
+      const labelParts = strongEls[realIdx].textContent.trim().split(' ');
+      const sectionName = labelParts.pop();
+      const courseName = labelParts.join(' ');
+      const combinedMeets = [...(meetsArr[0] || []), ...(meetsArr[1] || [])];
+      const combinedCode = classCodes.join(',');
+      const combinedCredit = (creditsArr[0] || 0) + (creditsArr[1] || 0);
+      const instructor = instructorArr[realIdx] || instructorArr[zeroIdx] || '';
+      const prob = Math.round(this.probCalc.calculateProbability(this.preenlistmentPriority.toLowerCase(), availableSlots, demand, true) * 10000) / 100;
 
-    // Extract credits
-    const credits = cells[2].textContent.trim().split('\n').map(c => parseFloat(c.replace(/\(|\)/g, '')));
-    const totalCredits = credits.reduce((a, b) => a + b, 0);
-
-    // Extract class code
-    const classCode = cells[0].textContent.trim();
-
-    // Format schedule array
-    const formattedSchedules = scheduleParts.map(sched => {
-      // Split schedule string into parts
-      const schedParts = sched.split(' ');
-      const day = schedParts[0];
-      const time = schedParts[1];
-      // Room may be multiple words (e.g., "lec CAL 212"), so join the rest
-      const room = schedParts.slice(2).join(' ');
-
-      const prob = this.probCalc.calculateProbability(
-        this.preenlistmentPriority.toLowerCase(),
-        availableSlots,
-        demand,
-        true
-      ) * 100;
-      return {
-        'Class Code': classCode,
-        Day: day,
-        Time: time,
-        Room: room || '',
+      combinedMeets.forEach(m => Object.assign(m, {
+        'Class Code': combinedCode,
         'Available Slots': availableSlots,
         'Total Slots': totalSlots,
         Demand: demand,
-        Credits: totalCredits,
-        Probability: Math.round(prob * 100) / 100,
-        Instructors: instructor
-      };
-    });
+        Credits: combinedCredit,
+        Probability: prob,
+        Instructors: instructor,
+        Remarks: remarks
+      }));
 
-    return formattedSchedules;
+      let subj = this.data.find(x => x[courseName]);
+      if (!subj) { subj = { [courseName]: [] }; this.data.push(subj); }
+      subj[courseName].push({ [sectionName]: combinedMeets });
+      return;
+    }
+
+    // Default: each as its own section
+    strongEls.forEach((el, idx) => {
+      const parts = el.textContent.trim().split(' ');
+      const section = parts.pop();
+      const courseName = parts.join(' ');
+      const meets = meetsArr[idx] || [];
+      const code = classCodes[idx] || '';
+      const credit = creditsArr[idx] || 0;
+      const instructor = instructorArr[idx] || '';
+      const prob = Math.round(this.probCalc.calculateProbability(this.preenlistmentPriority.toLowerCase(), availableSlots, demand, true) * 10000) / 100;
+
+      meets.forEach(m => Object.assign(m, {
+        'Class Code': code,
+        'Available Slots': availableSlots,
+        'Total Slots': totalSlots,
+        Demand: demand,
+        Credits: credit,
+        Probability: prob,
+        Instructors: instructor,
+        Remarks: remarks
+      }));
+
+      let subj = this.data.find(x => x[courseName]);
+      if (!subj) { subj = { [courseName]: [] }; this.data.push(subj); }
+      subj[courseName].push({ [section]: meets });
+    });
   }
 }
