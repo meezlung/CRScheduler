@@ -230,7 +230,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   // For dynamic rendering of table and infinite scrolling
-  const CHUNK_SIZE = 20;
+  const CHUNK_SIZE = 100;
   let currentStart = 0;
   let sentinel; // Declare sentinel for use in infinite scrolling
   let observer; // IntersectionObserver for sentinel

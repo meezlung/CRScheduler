@@ -134,25 +134,6 @@ export class ScheduleGenerator {
   }
 
   /**
-   *  Check if professor is in the schedule
-   */
-  profOK(combo){
-    if(!this.rawProfs.length) return true;
-    const present = combo.flatMap(item=>{
-      const sectionArr = Object.values(item)[0];
-      return sectionArr.flatMap(secObj=>{
-        const meetArr = Object.values(secObj)[0];
-        return meetArr.map(m=>m.Instructors.toLowerCase());
-      });
-    }).join(' ');
-    if(this.strict){
-      return this.rawProfs.every(p=>present.includes(p));
-    } else {
-      return this.rawProfs.some(p=>present.includes(p));
-    }
-  }
-
-  /**
    * Record similar‑shape key for a combo
    */
   recordShape(combo){
@@ -382,6 +363,7 @@ self.onmessage = ({ data }) => {
       postMessage({ success: true, data: { generatedSchedules, similarShapeCombinations } });
     } catch (err) {
       postMessage({ success: false, error: err.message });
+      throw new Error('Error in worker! ', err.message);
     }
   }
 };
