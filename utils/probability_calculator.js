@@ -47,4 +47,10 @@ export class ProbabilityCalculator {
       return Math.round(Math.min(availableSlots / totalDemand, 1.0) * 100) / 100;
     }
   }
+
+  // calculateProbability(_p, avail, total, _h) {
+  //   if (total <= 0) return 0.00;
+  //   const raw = avail / total;
+  //   return Math.round(Math.min(raw, 1.0) * 100) / 100;
+  // }
 }
