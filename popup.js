@@ -512,6 +512,8 @@ document.addEventListener('DOMContentLoaded', async () => {
         throw new Error('All URLs must be either preenlistment or registration links.');
       }
 
+      crscraper.preenlistmentPriority = preenlistment_priority;
+      crscraper.registrationPriority = registration_priority;
       crscraper.accessAllPossibleCourseSchedules(allCourseHTML);
 
       // Migrated this into a scheduleWorker
