@@ -4,8 +4,7 @@
   "version": "1.0",
   "description": "Fetch, generate, and rank CRS schedule combinations",
   "permissions": [
-    "activeTab",
-    "tabs"
+    "activeTab"
   ],
   "background": {
     "service_worker": "background.js"
