@@ -1,5 +1,9 @@
 # CRS Scheduler
 
+u can access the extension here: https://chromewebstore.google.com/detail/upd-crscheduler/jajjnacelenojpkijedehhggdceepjla
+
+docs still yet to be made...
+
 under development...
 
 demo:
