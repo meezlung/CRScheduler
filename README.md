@@ -67,6 +67,9 @@ Frontend (Chrome Extension)
 
 The extension uses the probability calculation algorithm from [UPD Course Probability Calculator](https://github.com/drew-747/UPD-Course-Probability-Calculator/blob/main/popup.js) by drew-747, which is based on available slots and total demand.
 
+## Inspiration
+
+All started just as a Python scraper + scheduler project ([CRScraper](https://github.com/meezlung/CRScraper/)).
 
 ## Future Roadmap
 
