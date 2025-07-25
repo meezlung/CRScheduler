@@ -313,19 +313,6 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
   // -----------------------
 
-
-  // Grab manifest
-  const manifest = chrome.runtime.getManifest();
-  console.log('Manifest', manifest);
-
-  // Then safely pull BACKEND URL, acts like a dotenv
-  const BACKEND = manifest.crsConfig?.backendURL;
-  console.log('BACKEND', BACKEND);
-
-  if (!BACKEND) {
-    console.error("⚠️ No backend URL configured!");
-  }
-
   // Only fetch priority once!
   const status = document.getElementById('status');
   loadingStatus.textContent = 'Fetching your registration priority...';
