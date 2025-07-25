@@ -2,14 +2,11 @@ import { CRScraperPreenlistment } from "./utils/crscraper_preenlistment.js";
 import { CRScraperRegistration } from "./utils/crscraper_registration.js";
 
 const workerUrl = chrome.runtime.getURL('./schedule_worker.js');
-console.log('Instantiating worker at', workerUrl);
 
 let scheduleWorker;
 try {
   scheduleWorker = new Worker(workerUrl, { type: 'module' });
-  console.log('Worker object created', scheduleWorker);
 } catch (err) {
-  console.error('Worker instantiation threw:', err);
 }
 
 function getBlockedTimes() {
@@ -416,17 +413,13 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     const urls = raw.split(',').map(u=>u.trim()).filter(u=>u);
     const urlKey = urls.slice().sort().join('');
-    console.log('urlKey', urlKey);
 
     scheduleWorker.onmessage = (entry) => {
       const { success, data, error } = entry.data;
       similarShapeCombinations = data.similarShapeCombinations;
-      console.log('similarShapeCombinations', similarShapeCombinations);
 
       const loadingResults = document.getElementById('loading-overlay-results');
       if (success) {
-        console.log('Generated schedules from worker:', data.generatedSchedules);
-
         // Continue rendering as before
         loadingStatus.textContent = 'Rendering table...';
         currentStart = 0;
@@ -526,9 +519,6 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // For the toggle button 'Switch to visual or table view'
     const renderChunkFunction = isVisual ? renderVisualChunk : renderTableChunk;
-
-    // const filtered_test = getFilteredGroups(groups, rawProfs, strict, forbiddenSlots);
-    // console.log('similar', similarShapeCombinations);
 
     const filtered = groups;
 
