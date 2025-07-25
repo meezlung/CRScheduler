@@ -358,9 +358,9 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   try {
     loadingStatus.textContent = 'Fetching RUPP data...'
-    const RUPP1Data = await fetch(`${BACKEND}/fetch-rupp1`);
+    const RUPP1Data = await fetch('https://rupp-backend-vblj.onrender.com/api/rupp/teachers');
     const RUPP1JSON = await RUPP1Data.json();
-    RUPP1JSON.teachers.teachers.forEach(t => {
+    RUPP1JSON.teachers.forEach(t => {
       const key = `${t.firstName} ${t.lastName}`.toLowerCase();
       teacherMap.set(key, t.id);
     });

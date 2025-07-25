@@ -6,6 +6,9 @@
   "permissions": [
     "activeTab"
   ],
+  "host_permissions": [
+    "https://rupp-backend-vblj.onrender.com/*"
+  ],
   "background": {
     "service_worker": "background.js"
   },
