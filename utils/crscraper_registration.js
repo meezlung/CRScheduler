@@ -54,84 +54,96 @@ export class CRScraperRegistration {
   }
 
   appendSortedRowData(cells) {
-    const courseSectionFull = cells[1].querySelector('strong')?.textContent.trim() || '';
-    // Handle cases like "Philo 1 THZ -1" where section may have extra spaces or tokens
-    const [course, section] = (() => {
-      const parts = courseSectionFull.split(' ');
-      // If last part is "-1" or similar, treat it as part of the section
-      if (parts.length > 2 && /^-?\d+$/.test(parts[parts.length - 1])) {
-        return [parts.slice(0, -2).join(' '), parts.slice(-2).join(' ')];
-      }
-      // Handles subjects like "App Physics 185" (course name with spaces and number)
-      if (parts.length > 2 && /^\d+$/.test(parts[parts.length - 1])) {
-        return [parts.slice(0, -1).join(' '), parts[parts.length - 1]];
-      }
-      return [parts.slice(0, -1).join(' '), parts[parts.length - 1]];
-    })();
-    
-    const formattedSchedule = this.formatSchedule(cells);
-    
-    let courseEntry = this.data.find(e => e[course]);
+    const brSplit = /(?:<br\s*\/?>\s*){2,}/gi;
 
-    if (!courseEntry) {
-      courseEntry = { [course]: [] };
-      this.data.push(courseEntry);
-    }
-    courseEntry[course].push({ [section]: formattedSchedule });
-  }
+    // Raw splits for blocks
+    const classCodes = cells[0].innerHTML.split(brSplit).map(s => s.replace(/<[^>]+>/g, '').trim()).filter(Boolean);
+    const creditsArr = cells[2].innerHTML.split(brSplit).map(s => parseFloat(s.replace(/<[^>]+>/g, '').trim())).filter(n => !isNaN(n));
+    const schedulesArr = cells[3].innerHTML.split(brSplit).map(s => s.replace(/<[^>]+>/g, '').trim()).filter(Boolean);
+    const instructorArr = Array.from(cells[1].innerHTML.matchAll(/<strong>.*?<\/strong><br>([^<]+)/gi)).map(m => m[1].trim());
 
-  // To be tested in Registration Period...
-  formatSchedule(cells) {
-    // Parse schedule strings
-    let parts = cells[3].textContent.trim().split('\n');
-    if (parts.length === 1) parts = parts[0].split('; ');
+    // dynamic detection of slots/demand
+    const texts = cells.map(td => td.textContent.replace(/\u00a0/g, '').trim());
+    const slotIdx = texts.findIndex(t => /^\d+\s*\/\s*\d+$/.test(t));
+    const [avail, total] = slotIdx >= 0 ? texts[slotIdx].split('/').map(n=>parseInt(n,10)) : [0,0];
+    const demandIdx = texts.findIndex((t,i)=>i>slotIdx && /^\d+$/.test(t));
+    const demand = demandIdx>=0?parseInt(texts[demandIdx],10):0;
 
-    // Extract slots and demand
-    const availTotal = cells[6].textContent.trim().replace(/\u00a0/g, '').replace(/\n/g, '');
-    const [avail, total] = availTotal.split('/').map(n => parseInt(n, 10));
-    const demand = parseInt(cells[7].textContent.trim().replace(/\u00a0/g, ''), 10);
-
-    // Extract credits
-    const credits = cells[2].textContent.trim().split('\n').map(c => parseFloat(c.replace(/[()]/g, '')));
-    const totalCredits = credits.reduce((a, b) => a + b, 0);
-
-    // Extract instructor
-    const instructor = cells[1].innerHTML.split('<br>')[1]?.trim() || '';
-
-    // Extract waitlist & action
+    // parse waitlist and action
     const wait = cells[4].textContent.trim().split('\n')[0].toUpperCase();
-    const action = cells[8].textContent.trim().split('\n')[0].toUpperCase();
+    const action = cells[8]?.textContent.trim().split('\n')[0].toUpperCase()||'';
 
-    // Build schedule objects
-    return parts.map(sched => {
-      const [day, time, ...rest] = sched.split(' ');
-      const room = rest.join(' ');
-      let prob;
-      if (wait === 'CLOSED' && action === 'ENLISTED ALREADY') {
-        prob = 100.0;
-      } else if (wait === 'CLOSED' || action === 'CLOSED') {
-        prob = -100.0;
-      } else {
-        prob = Math.round(
-          this.probCalc
-            .calculateProbability(
-              this.registrationPriority.toLowerCase(),
-              avail, demand, true
-            ) * 10000
-        ) / 100;
-      }
+    // parse meets blocks
+    const meetsArr = schedulesArr.map(block => block.split(/;\s*/).filter(Boolean).map(entry => {
+      const [day, time, ...roomParts] = entry.split(/\s+/);
+      return { Day: day, Time: time, Room: roomParts.join(' ') };
+    }));
 
-      return {
-        Day: day,
-        Time: time,
-        Room: room || '',
-        'Available Slots': avail,
-        'Total Slots': total,
-        Demand: demand,
-        Credits: totalCredits,
-        Probability: prob,
-        Instructors: instructor
-      };
+    const strongEls = Array.from(cells[1].querySelectorAll('strong'));
+
+    // merge blocks when one credit is zero (e.g. lab+lec grouping)
+    if (strongEls.length===2 && (creditsArr[0]===0||creditsArr[1]===0)) {
+      const zeroIdx = creditsArr[0]===0?0:1;
+      const realIdx = zeroIdx===0?1:0;
+      const parts = strongEls[realIdx].textContent.trim().split(' ');
+      const sectionName = parts.pop();
+      const courseName = parts.join(' ');
+      const combined = [...(meetsArr[0]||[]),...(meetsArr[1]||[])];
+      const codeCombined = classCodes.join(',');
+      const creditCombined = (creditsArr[0]||0)+(creditsArr[1]||0);
+      const inst = instructorArr[realIdx]||instructorArr[zeroIdx]||'';
+
+      const probBase = this.registrationPriority.toLowerCase();
+      combined.forEach(m=>{
+        let prob;
+        if(wait==='CLOSED'&&action.includes('ENLISTED')) prob=100;
+        else if(wait==='CLOSED'||action==='CLOSED') prob=-100;
+        else prob=Math.round(this.probCalc.calculateProbability(probBase,avail,demand,true)*10000)/100;
+        Object.assign(m,{
+          'Class Code': codeCombined,
+          'Available Slots': avail,
+          'Total Slots': total,
+          Demand: demand,
+          Credits: creditCombined,
+          Probability: prob,
+          Instructors: inst
+        });
+      });
+      let subj=this.data.find(x=>x[courseName]);
+      if(!subj){subj={ [courseName]:[]};this.data.push(subj);}      
+      subj[courseName].push({ [sectionName]: combined });
+      return;
+    }
+
+    // default: each block separate
+    strongEls.forEach((el,idx)=>{
+      const parts = el.textContent.trim().split(' ');
+      const section = parts.pop();
+      const courseName = parts.join(' ');
+      const meets = meetsArr[idx]||[];
+      const code = classCodes[idx]||'';
+      const credit = creditsArr[idx]||0;
+      const inst = instructorArr[idx]||'';
+
+      const probBase=this.registrationPriority.toLowerCase();
+      meets.forEach(m=>{
+        let prob;
+        if(wait==='CLOSED'&&action.includes('ENLISTED')) prob=100;
+        else if(wait==='CLOSED'||action==='CLOSED') prob=-100;
+        else prob=Math.round(this.probCalc.calculateProbability(probBase,avail,demand,true)*10000)/100;
+        Object.assign(m,{
+          'Class Code': code,
+          'Available Slots': avail,
+          'Total Slots': total,
+          Demand: demand,
+          Credits: credit,
+          Probability: prob,
+          Instructors: inst
+        });
+      });
+      let subj=this.data.find(x=>x[courseName]);
+      if(!subj){subj={ [courseName]:[]};this.data.push(subj);}
+      subj[courseName].push({ [section]: meets });
     });
   }
 }
