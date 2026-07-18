@@ -1,5 +1,5 @@
 import { ProbabilityCalculator } from "./probability_calculator.js";
-import { decodeHtmlEntities } from "./scraper_helpers.js";
+import { decodeHtmlEntities, extractInstructors } from "./scraper_helpers.js";
 
 export class CRScraperRegistration {
   constructor() {
@@ -61,7 +61,7 @@ export class CRScraperRegistration {
     const classCodes = cells[0].innerHTML.split(brSplit).map(s => s.replace(/<[^>]+>/g, '').trim()).filter(Boolean);
     const creditsArr = cells[2].innerHTML.split(brSplit).map(s => parseFloat(s.replace(/<[^>]+>/g, '').trim())).filter(n => !isNaN(n));
     const schedulesArr = cells[3].innerHTML.split(brSplit).map(s => decodeHtmlEntities(s.replace(/<[^>]+>/g, '')).trim()).filter(Boolean);
-    const instructorArr = Array.from(cells[1].innerHTML.matchAll(/<strong>.*?<\/strong><br>([^<]+)/gi)).map(m => m[1].trim());
+    const instructorArr = extractInstructors(cells[1].innerHTML);
 
     // dynamic detection of slots/demand
     const texts = cells.map(td => td.textContent.replace(/\u00a0/g, '').trim());
