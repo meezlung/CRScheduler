@@ -1,10 +1,5 @@
 import { ProbabilityCalculator } from "./probability_calculator.js";
-
-function decodeHtmlEntities(str) {
-  const el = document.createElement('textarea');
-  el.innerHTML = str;
-  return el.value;
-}
+import { decodeHtmlEntities } from "./scraper_helpers.js";
 
 export class CRScraperRegistration {
   constructor() {

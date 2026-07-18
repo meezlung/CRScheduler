@@ -126,7 +126,7 @@ function parseDays(dayCode) {
 const scheduleCache = new Map();
 
 // For collecting similar structure of time slots
-let similarShapeCombinations;
+let similarShapeCombinations = new Map();
 
 document.addEventListener('DOMContentLoaded', async () => {
   // Add loading animation here
@@ -434,6 +434,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       } else {
         console.error('Worker error:', error);
         status.textContent = 'Error: ' + error;
+        // Don't leave a previous successful run's data behind for "Show Similar" to render
+        similarShapeCombinations = new Map();
         loadingResults.classList.add('hidden');
         enableButtons(fetchBtn, clearBtn, switchViewBtn, showSimilarBtn);
       }

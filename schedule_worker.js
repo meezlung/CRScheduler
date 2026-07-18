@@ -118,20 +118,32 @@ export class ScheduleGenerator {
   }
 
   /**
+   * Parse a meeting's Day/Time into slot info, or null if unparseable
+   * (e.g. malformed scraped data) instead of throwing.
+   */
+  tryParseMeetSlots(meet) {
+    try {
+      const days = this.splitTokens(meet.Day);
+      const [s, e] = this.timeToSlotsBucketed(meet.Time);
+      return { days, s, e };
+    } catch (err) {
+      console.warn('Could not parse meeting Day/Time, skipping:', JSON.stringify(meet), err.message);
+      return null;
+    }
+  }
+
+  /**
    * Check if a section schedule touches forbidden slots
    */
   hitsForbidden(schedule){
     for(let meet of schedule){
-      try {
-        const days = this.splitTokens(meet.Day);
-        const [s,e] = this.timeToSlotsBucketed(meet.Time);
-        for(let day of days){
-          for(let slot=s; slot<e; slot++){
-            if(this.forbiddenSet.has(`${day}|${slot}`)) return true;
-          }
+      const parsed = this.tryParseMeetSlots(meet);
+      if (!parsed) continue;
+      const { days, s, e } = parsed;
+      for(let day of days){
+        for(let slot=s; slot<e; slot++){
+          if(this.forbiddenSet.has(`${day}|${slot}`)) return true;
         }
-      } catch (err) {
-        console.warn('Could not parse meeting Day/Time, skipping:', JSON.stringify(meet), err.message);
       }
     }
     return false;
@@ -147,14 +159,10 @@ export class ScheduleGenerator {
     const keys = combo.flatMap(item=>
       Object.values(item)[0].flatMap(secObj=>
         Object.values(secObj)[0].flatMap(meet=>{
-          try {
-            const days = this.splitTokens(meet.Day);
-            const [s,e] = this.timeToSlotsBucketed(meet.Time);
-            return days.flatMap(d=>Array.from({length:e-s},(_,i)=>`${d}|${s+i}`));
-          } catch (err) {
-            console.warn('Could not parse meeting Day/Time, skipping:', JSON.stringify(meet), err.message);
-            return [];
-          }
+          const parsed = this.tryParseMeetSlots(meet);
+          if (!parsed) return [];
+          const { days, s, e } = parsed;
+          return days.flatMap(d=>Array.from({length:e-s},(_,i)=>`${d}|${s+i}`));
         })
       )
     ).sort();
@@ -239,10 +247,15 @@ export class ScheduleGenerator {
    * Conflict check between two meetings
    */
   conflicts(m1, m2){
-    const days1 = this.splitTokens(m1.Day), days2 = this.splitTokens(m2.Day);
-    if(!days1.some(d=>days2.includes(d))) return false;
-    const [s1,e1]=this.parseTime(m1.Time), [s2,e2]=this.parseTime(m2.Time);
-    return s1<e2 && s2<e1;
+    try {
+      const days1 = this.splitTokens(m1.Day), days2 = this.splitTokens(m2.Day);
+      if(!days1.some(d=>days2.includes(d))) return false;
+      const [s1,e1]=this.parseTime(m1.Time), [s2,e2]=this.parseTime(m2.Time);
+      return s1<e2 && s2<e1;
+    } catch (err) {
+      console.warn('Could not parse meeting Day/Time for conflict check, skipping:', JSON.stringify(m1), JSON.stringify(m2), err.message);
+      return false;
+    }
   }
 
   /**
