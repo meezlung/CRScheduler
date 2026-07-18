@@ -1,5 +1,11 @@
 import { ProbabilityCalculator } from "./probability_calculator.js";
 
+function decodeHtmlEntities(str) {
+  const el = document.createElement('textarea');
+  el.innerHTML = str;
+  return el.value;
+}
+
 export class CRScraperPreenlistment {
   constructor() {
     this.preenlistmentPriority = "";
@@ -52,7 +58,7 @@ export class CRScraperPreenlistment {
     // Raw splits
     const classCodes = cells[0].innerHTML.split(brSplit).map(s => s.replace(/<[^>]+>/g, '').trim()).filter(Boolean);
     const creditsArr = cells[2].innerHTML.split(brSplit).map(s => parseFloat(s.replace(/<[^>]+>/g, '').trim())).filter(n => !isNaN(n));
-    const schedulesArr = cells[3].innerHTML.split(brSplit).map(s => s.replace(/<[^>]+>/g, '').trim()).filter(Boolean);
+    const schedulesArr = cells[3].innerHTML.split(brSplit).map(s => decodeHtmlEntities(s.replace(/<[^>]+>/g, '')).trim()).filter(Boolean);
     const instructorArr = Array.from(cells[1].innerHTML.matchAll(/<strong>.*?<\/strong><br>([^<]+)/gi)).map(m => m[1].trim());
 
     // Dynamic slots/demand/remarks

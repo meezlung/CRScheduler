@@ -416,10 +416,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     scheduleWorker.onmessage = (entry) => {
       const { success, data, error } = entry.data;
-      similarShapeCombinations = data.similarShapeCombinations;
 
       const loadingResults = document.getElementById('loading-overlay-results');
       if (success) {
+        similarShapeCombinations = data.similarShapeCombinations;
         // Continue rendering as before
         loadingStatus.textContent = 'Rendering table...';
         currentStart = 0;

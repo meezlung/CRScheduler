@@ -122,12 +122,16 @@ export class ScheduleGenerator {
    */
   hitsForbidden(schedule){
     for(let meet of schedule){
-      const days = this.splitTokens(meet.Day);
-      const [s,e] = this.timeToSlotsBucketed(meet.Time);
-      for(let day of days){
-        for(let slot=s; slot<e; slot++){
-          if(this.forbiddenSet.has(`${day}|${slot}`)) return true;
+      try {
+        const days = this.splitTokens(meet.Day);
+        const [s,e] = this.timeToSlotsBucketed(meet.Time);
+        for(let day of days){
+          for(let slot=s; slot<e; slot++){
+            if(this.forbiddenSet.has(`${day}|${slot}`)) return true;
+          }
         }
+      } catch (err) {
+        console.warn('Could not parse meeting Day/Time, skipping:', JSON.stringify(meet), err.message);
       }
     }
     return false;
@@ -140,12 +144,17 @@ export class ScheduleGenerator {
     const MAX_PER_SHAPE = 10;
 
     // flatten into day|slot strings
-    const keys = combo.flatMap(item=> 
+    const keys = combo.flatMap(item=>
       Object.values(item)[0].flatMap(secObj=>
         Object.values(secObj)[0].flatMap(meet=>{
-          const days = this.splitTokens(meet.Day);
-          const [s,e] = this.timeToSlotsBucketed(meet.Time);
-          return days.flatMap(d=>Array.from({length:e-s},(_,i)=>`${d}|${s+i}`));
+          try {
+            const days = this.splitTokens(meet.Day);
+            const [s,e] = this.timeToSlotsBucketed(meet.Time);
+            return days.flatMap(d=>Array.from({length:e-s},(_,i)=>`${d}|${s+i}`));
+          } catch (err) {
+            console.warn('Could not parse meeting Day/Time, skipping:', JSON.stringify(meet), err.message);
+            return [];
+          }
         })
       )
     ).sort();
@@ -320,6 +329,7 @@ export class ScheduleGenerator {
    */
   generateSchedules(){
     const out = [];
+
     this.backtrack(0, [], out, []);
 
     const withProb = out.map(combo => ({
@@ -355,7 +365,6 @@ self.onmessage = ({ data }) => {
       const { generatedSchedules, similarShapeCombinations } = scheduleGenerator.generateSchedules();
 
       console.log('generatedSchedules', generatedSchedules);
-      console.log('similarSched', similarShapeCombinations);
 
       const endTime = performance.now();
       console.log(`Schedule generation took ${(endTime - startTime).toFixed(2)} ms`);
@@ -363,7 +372,6 @@ self.onmessage = ({ data }) => {
       postMessage({ success: true, data: { generatedSchedules, similarShapeCombinations } });
     } catch (err) {
       postMessage({ success: false, error: err.message });
-      throw new Error('Error in worker! ', err.message);
     }
   }
 };
