@@ -316,10 +316,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   loadingStatus.textContent = 'Fetching your registration priority...';
 
   // Get classmessages and scrape priorities HTML page
-  const classMsgResp = await fetch('https://crs.upd.edu.ph/user/view/classmessages', {
-    credentials: 'include'
-  });
-  const classMsgHtml = await classMsgResp.text();
+  let classMsgHtml;
+  try {
+    const classMsgResp = await fetch('https://crs.upd.edu.ph/user/view/classmessages', {
+      credentials: 'include'
+    });
+    classMsgHtml = await classMsgResp.text();
+  } catch (err) {
+    console.error('Failed to fetch CRS priority data:', err);
+    loadingStatus.textContent = 'Could not connect to CRS. Check your internet connection and refresh the page.';
+    return;
+  }
 
   // DOM Parser
   const crscraperPreenlistment = new CRScraperPreenlistment();
