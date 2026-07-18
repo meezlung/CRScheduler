@@ -77,9 +77,16 @@ export class CRScraperPreenlistment {
     if (strongEls.length === 2 && (creditsArr[0] === 0 || creditsArr[1] === 0)) {
       const zeroIdx = creditsArr[0] === 0 ? 0 : 1;
       const realIdx = zeroIdx === 0 ? 1 : 0;
-      const labelParts = strongEls[realIdx].textContent.trim().split(' ');
-      const sectionName = labelParts.pop();
-      const courseName = labelParts.join(' ');
+      const realParts = strongEls[realIdx].textContent.trim().split(' ');
+      const realSection = realParts.pop();
+      const courseName = realParts.join(' ');
+      const zeroSection = strongEls[zeroIdx].textContent.trim().split(' ').pop();
+      // The lab/discussion block's name (e.g. "THW/TRU1") already encodes both
+      // the lecture and its counterpart section code; fall back to combining
+      // them manually if it doesn't.
+      const sectionName = zeroSection.includes('/') ? zeroSection
+        : zeroSection === realSection ? realSection
+        : `${realSection}/${zeroSection}`;
       const combinedMeets = [...(meetsArr[0] || []), ...(meetsArr[1] || [])];
       const combinedCode = classCodes.join(',');
       const combinedCredit = (creditsArr[0] || 0) + (creditsArr[1] || 0);
