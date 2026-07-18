@@ -1,5 +1,6 @@
 import { CRScraperPreenlistment } from "./utils/crscraper_preenlistment.js";
 import { CRScraperRegistration } from "./utils/crscraper_registration.js";
+import { isLoggedIn } from "./utils/scraper_helpers.js";
 
 const workerUrl = chrome.runtime.getURL('./schedule_worker.js');
 
@@ -479,6 +480,12 @@ document.addEventListener('DOMContentLoaded', async () => {
         const courseResp = await fetch(url, { credentials: 'include' });
         const courseHtml = await courseResp.text();
 
+        // The session may have expired since the popup was opened; CRS then
+        // serves the landing/login page instead of the real search results.
+        if (!isLoggedIn(courseHtml)) {
+          throw new Error('Session expired. Login into CRS again.');
+        }
+
         // Then collect all HTMLs
         allCourseHTML.push(courseHtml);
       }
@@ -513,6 +520,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     } catch (err) {
       console.error(err);
       status.textContent = 'Error: ' + err.message;
+      loadingResults.classList.add('hidden');
+      enableButtons(fetchBtn, clearBtn, switchViewBtn, showSimilarBtn);
     }
   });
 
