@@ -1,3 +1,9 @@
+// Returns true if the given CRS page HTML is a genuine authenticated page
+// rather than the landing/login page CRS serves once the session has expired.
+export function isLoggedIn(html) {
+  return /You are logged in as/i.test(html);
+}
+
 export function decodeHtmlEntities(str) {
   const el = document.createElement('textarea');
   el.innerHTML = str;
@@ -13,8 +19,28 @@ export function extractInstructors(cellHtml) {
     .map(m => {
       const lines = m[1]
         .split(/<br\s*\/?>/gi)
-        .map(s => s.trim())
+        .map(s => decodeHtmlEntities(s).trim())
         .filter(s => s.length > 0 && !/</.test(s));
       return lines.length ? lines[lines.length - 1] : '';
+    });
+}
+
+// Parses a Schedule/Room/Instructors cell into per-block meetings. Each block
+// (separated by 2+ <br>) is a Day/Time/Room line, then an Instructor line
+// (e.g. a name or "Concealed"), then a Mode-of-Delivery line, each separated
+// by a single <br>. Returns an array of arrays of { Day, Time, Room, Instructors }.
+export function parseScheduleBlocks(cellHtml) {
+  const brSplit = /(?:<br\s*\/?>\s*){2,}/gi;
+  return cellHtml.split(brSplit)
+    .map(raw => decodeHtmlEntities(raw))
+    .filter(raw => raw.replace(/<[^>]+>/g, '').trim().length > 0)
+    .map(raw => {
+      const [meetingLine = '', instructorLine = ''] = raw
+        .split(/<br\s*\/?>/gi)
+        .map(l => l.replace(/<[^>]+>/g, '').trim());
+      return meetingLine.split(/;\s*/).filter(Boolean).map(entry => {
+        const [day, time, ...roomParts] = entry.split(/\s+/);
+        return { Day: day, Time: time, Room: roomParts.join(' '), Instructors: instructorLine };
+      });
     });
 }

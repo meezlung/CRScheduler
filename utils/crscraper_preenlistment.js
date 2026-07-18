@@ -1,5 +1,5 @@
 import { ProbabilityCalculator } from "./probability_calculator.js";
-import { decodeHtmlEntities, extractInstructors } from "./scraper_helpers.js";
+import { extractInstructors, parseScheduleBlocks } from "./scraper_helpers.js";
 
 export class CRScraperPreenlistment {
   constructor() {
@@ -53,7 +53,6 @@ export class CRScraperPreenlistment {
     // Raw splits
     const classCodes = cells[0].innerHTML.split(brSplit).map(s => s.replace(/<[^>]+>/g, '').trim()).filter(Boolean);
     const creditsArr = cells[2].innerHTML.split(brSplit).map(s => parseFloat(s.replace(/<[^>]+>/g, '').trim())).filter(n => !isNaN(n));
-    const schedulesArr = cells[3].innerHTML.split(brSplit).map(s => decodeHtmlEntities(s.replace(/<[^>]+>/g, '')).trim()).filter(Boolean);
     const instructorArr = extractInstructors(cells[1].innerHTML);
 
     // Dynamic slots/demand/remarks
@@ -65,11 +64,9 @@ export class CRScraperPreenlistment {
     const remarksIdx = texts.findIndex((t, i) => i > 1 && i < slotIdx);
     const remarks = remarksIdx >= 0 ? texts[remarksIdx] : '';
 
-    // Pre-parse meets
-    const meetsArr = schedulesArr.map(block => block.split(/;\s*/).filter(Boolean).map(entry => {
-      const [day, time, ...roomParts] = entry.split(/\s+/);
-      return { Day: day, Time: time, Room: roomParts.join(' ') };
-    }));
+    // Pre-parse meets (each meet's Instructors is the per-meeting line from
+    // the Schedule cell itself, e.g. "Concealed" or a real name, when present)
+    const meetsArr = parseScheduleBlocks(cells[3].innerHTML);
 
     const strongEls = Array.from(cells[1].querySelectorAll('strong'));
 
@@ -100,7 +97,7 @@ export class CRScraperPreenlistment {
         Demand: demand,
         Credits: combinedCredit,
         Probability: prob,
-        Instructors: instructor,
+        Instructors: m.Instructors || instructor,
         Remarks: remarks
       }));
 
@@ -128,7 +125,7 @@ export class CRScraperPreenlistment {
         Demand: demand,
         Credits: credit,
         Probability: prob,
-        Instructors: instructor,
+        Instructors: m.Instructors || instructor,
         Remarks: remarks
       }));
 

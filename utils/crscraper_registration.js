@@ -1,5 +1,5 @@
 import { ProbabilityCalculator } from "./probability_calculator.js";
-import { decodeHtmlEntities, extractInstructors } from "./scraper_helpers.js";
+import { extractInstructors, parseScheduleBlocks } from "./scraper_helpers.js";
 
 export class CRScraperRegistration {
   constructor() {
@@ -60,7 +60,6 @@ export class CRScraperRegistration {
     // Raw splits for blocks
     const classCodes = cells[0].innerHTML.split(brSplit).map(s => s.replace(/<[^>]+>/g, '').trim()).filter(Boolean);
     const creditsArr = cells[2].innerHTML.split(brSplit).map(s => parseFloat(s.replace(/<[^>]+>/g, '').trim())).filter(n => !isNaN(n));
-    const schedulesArr = cells[3].innerHTML.split(brSplit).map(s => decodeHtmlEntities(s.replace(/<[^>]+>/g, '')).trim()).filter(Boolean);
     const instructorArr = extractInstructors(cells[1].innerHTML);
 
     // dynamic detection of slots/demand
@@ -74,11 +73,9 @@ export class CRScraperRegistration {
     const wait = cells[4].textContent.trim().split('\n')[0].toUpperCase();
     const action = cells[8]?.textContent.trim().split('\n')[0].toUpperCase()||'';
 
-    // parse meets blocks
-    const meetsArr = schedulesArr.map(block => block.split(/;\s*/).filter(Boolean).map(entry => {
-      const [day, time, ...roomParts] = entry.split(/\s+/);
-      return { Day: day, Time: time, Room: roomParts.join(' ') };
-    }));
+    // parse meets blocks (each meet's Instructors is the per-meeting line from
+    // the Schedule cell itself, e.g. "Concealed" or a real name, when present)
+    const meetsArr = parseScheduleBlocks(cells[3].innerHTML);
 
     const strongEls = Array.from(cells[1].querySelectorAll('strong'));
 
@@ -114,7 +111,7 @@ export class CRScraperRegistration {
           Demand: demand,
           Credits: creditCombined,
           Probability: prob,
-          Instructors: inst
+          Instructors: m.Instructors || inst
         });
       });
       let subj=this.data.find(x=>x[courseName]);
@@ -146,7 +143,7 @@ export class CRScraperRegistration {
           Demand: demand,
           Credits: credit,
           Probability: prob,
-          Instructors: inst
+          Instructors: m.Instructors || inst
         });
       });
       let subj=this.data.find(x=>x[courseName]);
